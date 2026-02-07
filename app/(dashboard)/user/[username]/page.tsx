@@ -16,6 +16,7 @@ import { BookOpen, Users, Trophy, Clock, Percent, UserCheck, UserPlus, Loader2 }
 import type { Profile, PlayReport } from '@/lib/types'
 import { TierBadge } from '@/components/tier-badge'
 import StatCard from '@/components/stat-card'
+import { ActivityTimeline } from '@/components/activity-timeline'
 
 interface UserStats {
   totalSessions: number
@@ -663,29 +664,40 @@ export default function UserProfilePage() {
         <StatCard icon={<Percent className="w-4 h-4" />} label="生還率" value={`${stats.survivalRate}%`} />
       </div>
 
-      {/* Collection */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-medium">
-          {isOwnProfile ? 'あなたのコレクション' : `${profile.display_name || profile.username}のコレクション`}
-        </h2>
-        
-        {reports.length === 0 ? (
-          <div className="text-center py-12 bg-card/50 rounded-lg border border-border/50">
-            <p className="text-muted-foreground mb-4">まだセッション記録がありません</p>
-            {isOwnProfile && (
-              <Link href="/reports/new">
-                <Button>最初の記録を作成</Button>
-              </Link>
-            )}
-          </div>
-        ) : (
-          <SessionCardGrid columns={4}>
-            {reports.map((report) => (
-              <SessionCard key={report.id} report={report} showEdit={isOwnProfile} />
-            ))}
-          </SessionCardGrid>
-        )}
-      </div>
+      {/* Collection & Timeline */}
+      <Tabs defaultValue="collection" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="collection">コレクション</TabsTrigger>
+          <TabsTrigger value="timeline">タイムライン</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="collection">
+          {reports.length === 0 ? (
+            <div className="text-center py-12 bg-card/50 rounded-lg border border-border/50">
+              <p className="text-muted-foreground mb-4">まだセッション記録がありません</p>
+              {isOwnProfile && (
+                <Link href="/reports/new">
+                  <Button>最初の記録を作成</Button>
+                </Link>
+              )}
+            </div>
+          ) : (
+            <SessionCardGrid columns={4}>
+              {reports.map((report) => (
+                <SessionCard key={report.id} report={report} showEdit={isOwnProfile} />
+              ))}
+            </SessionCardGrid>
+          )}
+        </TabsContent>
+
+        <TabsContent value="timeline">
+          <ActivityTimeline
+            reports={reports}
+            profile={profile}
+            currentUserId={currentUserId}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

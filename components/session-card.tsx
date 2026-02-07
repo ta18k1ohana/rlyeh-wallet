@@ -98,7 +98,7 @@ export function SessionCard({
   }
 
   return (
-    <div className="group">
+    <div className="group break-inside-avoid mb-5">
       <Link href={`/reports/${report.id}`} className="block">
         {/* Card Container */}
         <div className={cn(
@@ -109,26 +109,24 @@ export function SessionCard({
           "hover:border-border/60 hover:-translate-y-0.5"
         )}>
           {/* Image wrapper */}
-          <div className={cn(
-            "relative w-full bg-muted/30",
-            compact ? "aspect-[4/3]" : "aspect-[4/3]"
-          )}>
+          <div className="relative w-full bg-muted/30">
             {report.cover_image_url ? (
               <Image
-                src={report.cover_image_url || "/placeholder.svg"}
+                src={report.cover_image_url}
                 alt={report.scenario_name}
-                fill
-                className="object-contain p-3"
+                width={400}
+                height={600}
+                className="w-full h-auto"
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted">
+              <div className="aspect-[3/4] flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted">
                 <span className="text-5xl font-extralight text-muted-foreground/20 tracking-widest">
                   {report.scenario_name.charAt(0).toUpperCase()}
                 </span>
               </div>
             )}
-            
+
             {/* Edit button overlay */}
             {showEdit && (
               <button
@@ -157,6 +155,41 @@ export function SessionCard({
               <ReportTagDisplay tags={report.tags} maxDisplay={2} />
             )}
             
+            {/* Participants (compact avatar stack) */}
+            {report.participants && report.participants.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <div className="flex -space-x-1.5">
+                  {report.participants.slice(0, 4).map((p, idx) => {
+                    const isTagged = p.user_id && p.username?.startsWith('@')
+                    const pProfile = p.profile
+                    const displayChar = isTagged && pProfile
+                      ? (pProfile.display_name || pProfile.username).charAt(0).toUpperCase()
+                      : p.username.replace(/^@/, '').charAt(0).toUpperCase()
+
+                    return isTagged && pProfile ? (
+                      <Avatar key={p.id || idx} className="w-5 h-5 rounded-full border-2 border-card">
+                        <AvatarImage src={pProfile.avatar_url || undefined} />
+                        <AvatarFallback className="text-[8px]">{displayChar}</AvatarFallback>
+                      </Avatar>
+                    ) : (
+                      <Avatar key={p.id || idx} className="w-5 h-5 rounded-full border-2 border-card">
+                        <AvatarFallback className="text-[8px] bg-muted">{displayChar}</AvatarFallback>
+                      </Avatar>
+                    )
+                  })}
+                </div>
+                <span className="text-[10px] text-muted-foreground truncate">
+                  {report.participants.map(p => {
+                    const isTagged = p.user_id && p.username?.startsWith('@')
+                    const pProfile = p.profile
+                    if (isTagged && pProfile) return pProfile.display_name || pProfile.username
+                    return p.username.replace(/^@/, '')
+                  }).slice(0, 2).join(', ')}
+                  {report.participants.length > 2 && ` 他${report.participants.length - 2}名`}
+                </span>
+              </div>
+            )}
+
             {/* Author / Profile */}
             {showAuthor && report.profile && (
               <button 
@@ -234,10 +267,10 @@ export function SessionCardGrid({
 }) {
   return (
     <div className={cn(
-      "grid gap-5",
-      columns === 4 
-        ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" 
-        : "grid-cols-2 md:grid-cols-3"
+      "gap-5",
+      columns === 4
+        ? "columns-2 md:columns-3 lg:columns-4"
+        : "columns-2 md:columns-3"
     )}>
       {children}
     </div>

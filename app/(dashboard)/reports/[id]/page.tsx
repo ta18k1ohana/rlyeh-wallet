@@ -44,7 +44,7 @@ export default async function ReportDetailPage({ params }: PageProps) {
     .select(`
       *,
       profile:profiles(id, username, display_name, avatar_url),
-      participants:play_report_participants(*),
+      participants:play_report_participants(*, profile:profiles(id, username, display_name, avatar_url)),
       images:play_report_images(*),
       tags:report_tags(*)
     `)
@@ -248,23 +248,29 @@ export default async function ReportDetailPage({ params }: PageProps) {
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-2">KP（キーパー）</p>
                 <div className="space-y-2">
-                  {kpParticipants.map((p: { id: string; username: string; user_id?: string | null }) => {
-                    const linkedUsername = p.user_id && p.username.startsWith('@') 
-                      ? p.username.slice(1) 
+                  {kpParticipants.map((p: { id: string; username: string; user_id?: string | null; profile?: { id: string; username: string; display_name: string | null; avatar_url: string | null } | null }) => {
+                    const linkedUsername = p.user_id && p.username.startsWith('@')
+                      ? p.username.slice(1)
                       : null
+                    const displayName = linkedUsername && p.profile
+                      ? (p.profile.display_name || p.profile.username)
+                      : p.username
 
                     const content = (
                       <div key={p.id} className={cn(
                         "flex items-center gap-2 p-2 rounded-lg bg-background/50",
                         linkedUsername && "hover:bg-background/80 transition-colors cursor-pointer"
                       )}>
-<Avatar className="w-8 h-8 rounded-lg">
-                              <AvatarFallback className="bg-primary/20 text-primary text-xs rounded-lg">
-                            {p.username.replace('@', '').slice(0, 2).toUpperCase()}
+                        <Avatar className="w-8 h-8 rounded-lg">
+                          {linkedUsername && p.profile?.avatar_url && (
+                            <AvatarImage src={p.profile.avatar_url} className="rounded-lg" />
+                          )}
+                          <AvatarFallback className="bg-primary/20 text-primary text-xs rounded-lg">
+                            {displayName.replace('@', '').slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <span className={linkedUsername ? "text-primary hover:underline" : ""}>
-                          {p.username}
+                          {displayName}
                         </span>
                       </div>
                     )
@@ -285,11 +291,13 @@ export default async function ReportDetailPage({ params }: PageProps) {
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-2">PL（プレイヤー）</p>
                 <div className="space-y-2">
-                  {plParticipants.map((p: { id: string; username: string; user_id?: string | null; character_name?: string; result?: string }) => {
-                    // Extract username from @username format
-                    const linkedUsername = p.user_id && p.username.startsWith('@') 
-                      ? p.username.slice(1) 
+                  {plParticipants.map((p: { id: string; username: string; user_id?: string | null; character_name?: string; result?: string; profile?: { id: string; username: string; display_name: string | null; avatar_url: string | null } | null }) => {
+                    const linkedUsername = p.user_id && p.username.startsWith('@')
+                      ? p.username.slice(1)
                       : null
+                    const displayName = linkedUsername && p.profile
+                      ? (p.profile.display_name || p.profile.username)
+                      : p.username
 
                     const content = (
                       <div key={p.id} className={cn(
@@ -298,13 +306,16 @@ export default async function ReportDetailPage({ params }: PageProps) {
                       )}>
                         <div className="flex items-center gap-2">
                           <Avatar className="w-8 h-8 rounded-lg">
+                            {linkedUsername && p.profile?.avatar_url && (
+                              <AvatarImage src={p.profile.avatar_url} className="rounded-lg" />
+                            )}
                             <AvatarFallback className="bg-primary/20 text-primary text-xs rounded-lg">
-                              {p.username.replace('@', '').slice(0, 2).toUpperCase()}
+                              {displayName.replace('@', '').slice(0, 2).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <div>
                             <span className={linkedUsername ? "text-primary hover:underline" : ""}>
-                              {p.username}
+                              {displayName}
                             </span>
                             {p.character_name && (
                               <span className="text-sm text-muted-foreground ml-2">
@@ -314,11 +325,11 @@ export default async function ReportDetailPage({ params }: PageProps) {
                           </div>
                         </div>
                         {p.result && (
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className={
-                              p.result === 'survive' 
-                                ? 'bg-primary/20 text-primary border-primary/30' 
+                              p.result === 'survive'
+                                ? 'bg-primary/20 text-primary border-primary/30'
                                 : (p.result === 'lost' || p.result === 'dead' || p.result === 'insane')
                                 ? 'bg-destructive/20 text-destructive border-destructive/30'
                                 : 'bg-muted text-muted-foreground'
