@@ -14,10 +14,10 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { ImageUpload } from '@/components/image-upload'
-import { 
-  Settings, 
-  User, 
-  Bell, 
+import {
+  Settings,
+  User,
+  Bell,
   Shield,
   Loader2,
   Save,
@@ -38,12 +38,18 @@ import {
   MessageSquare
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Profile, NotificationSettings } from '@/lib/types'
+import type { Profile, NotificationSettings, ScenarioPreference, PlayReport } from '@/lib/types'
 import { getProfileLimits, canUseFeature } from '@/lib/tier-limits'
 import { TagManager } from '@/components/tag-manager'
 import { FolderManager } from '@/components/folder-manager'
 import { DataExport } from '@/components/data-export'
 import { TierBadge } from '@/components/tier-badge'
+import { ScenarioPreferenceManager } from '@/components/scenario-preference-manager'
+import { XShareButton } from '@/components/x-share-button'
+import { TagToggleGroup } from '@/components/tag-toggle-group'
+import { FavoriteScenarioPicker } from '@/components/favorite-scenario-picker'
+import { ROLE_PREFERENCE_OPTIONS, SCENARIO_TENDENCY_TAGS, PLAY_STYLE_OPTIONS } from '@/lib/trpg-preferences'
+import { Heart, EyeOff } from 'lucide-react'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -65,7 +71,7 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [bio, setBio] = useState('')
   const [privacySetting, setPrivacySetting] = useState<'public' | 'followers' | 'private'>('followers')
-  
+
   // Username validation state
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'unchanged'>('unchanged')
   const [usernameError, setUsernameError] = useState<string | null>(null)
@@ -84,6 +90,18 @@ export default function SettingsPage() {
   const [acceptViewerComments, setAcceptViewerComments] = useState(false)
   const [acceptFusetter, setAcceptFusetter] = useState(false)
   const [requireMentionApproval, setRequireMentionApproval] = useState(false)
+
+  // Pro settings state
+  const [hideStreamerAds, setHideStreamerAds] = useState(false)
+  const [scenarioPreferences, setScenarioPreferences] = useState<ScenarioPreference[]>([])
+
+  // TRPG preference state
+  const [rolePreference, setRolePreference] = useState<string>('')
+  const [favoriteReportIds, setFavoriteReportIds] = useState<string[]>([])
+  const [scenarioTags, setScenarioTags] = useState<string[]>([])
+  const [playStyleTags, setPlayStyleTags] = useState<string[]>([])
+  const [playStyleOther, setPlayStyleOther] = useState('')
+  const [userReports, setUserReports] = useState<PlayReport[]>([])
 
   useEffect(() => {
     async function loadData() {
@@ -117,6 +135,45 @@ export default function SettingsPage() {
         setAcceptViewerComments(profileData.accept_viewer_comments || false)
         setAcceptFusetter(profileData.accept_fusetter || false)
         setRequireMentionApproval(profileData.require_mention_approval || false)
+        // TRPG preferences
+        setRolePreference(profileData.role_preference || '')
+        setFavoriteReportIds(profileData.favorite_report_ids || [])
+        setScenarioTags(profileData.scenario_tags || [])
+        setPlayStyleTags(profileData.play_style_tags || [])
+        setPlayStyleOther(profileData.play_style_other || '')
+      }
+
+      // Load user's reports for favorite scenario picker
+      const { data: reportsData } = await supabase
+        .from('play_reports')
+        .select('id, scenario_name, cover_image_url')
+        .eq('user_id', user.id)
+        .order('played_at', { ascending: false })
+
+      if (reportsData) {
+        setUserReports(reportsData as PlayReport[])
+      }
+
+      // Load ad preferences
+      const { data: adPrefs } = await supabase
+        .from('user_ad_preferences')
+        .select('hide_streamer_ads')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (adPrefs) {
+        setHideStreamerAds(adPrefs.hide_streamer_ads || false)
+      }
+
+      // Load scenario preferences
+      const { data: scenarioPrefs } = await supabase
+        .from('scenario_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (scenarioPrefs) {
+        setScenarioPreferences(scenarioPrefs)
       }
 
       // Load notification settings
@@ -187,30 +244,35 @@ export default function SettingsPage() {
 
   async function saveProfile() {
     if (!profile) return
-    
+
     // Validate username if changed
     if (username !== originalUsername && usernameStatus !== 'available') {
       toast.error('アカウントIDを確認してください')
       return
     }
-    
+
     setSaving(true)
 
     const supabase = createClient()
-    
+
     const updateData: Record<string, unknown> = {
       display_name: displayName || null,
       avatar_url: avatarUrl,
       bio: bio || null,
       privacy_setting: privacySetting,
+      role_preference: rolePreference || null,
+      favorite_report_ids: favoriteReportIds,
+      scenario_tags: scenarioTags,
+      play_style_tags: playStyleTags,
+      play_style_other: playStyleOther || null,
       updated_at: new Date().toISOString(),
     }
-    
+
     // Only update username if changed and valid
     if (username !== originalUsername && usernameStatus === 'available') {
       updateData.username = username.toLowerCase()
     }
-    
+
     const { error } = await supabase
       .from('profiles')
       .update(updateData)
@@ -238,7 +300,7 @@ export default function SettingsPage() {
     setSaving(true)
 
     const supabase = createClient()
-    
+
     const settings = {
       user_id: profile.id,
       mention_notification: mentionNotification,
@@ -266,7 +328,7 @@ export default function SettingsPage() {
     setSaving(true)
 
     const supabase = createClient()
-    
+
     const { error } = await supabase
       .from('profiles')
       .update({
@@ -476,9 +538,104 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <Button 
-                onClick={saveProfile} 
-                disabled={saving || (usernameStatus !== 'unchanged' && usernameStatus !== 'available')} 
+              <Button
+                onClick={saveProfile}
+                disabled={saving || (usernameStatus !== 'unchanged' && usernameStatus !== 'available')}
+                className="gap-2"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                保存
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* TRPG Preferences Card */}
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader>
+              <CardTitle>TRPG設定</CardTitle>
+              <CardDescription>プロフィールに表示されるTRPG関連の設定</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Role Preference */}
+              <div className="space-y-2">
+                <Label>プレイスタイル</Label>
+                <Select
+                  value={rolePreference || 'none'}
+                  onValueChange={(v) => setRolePreference(v === 'none' ? '' : v)}
+                  disabled={saving}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="未設定" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">未設定</SelectItem>
+                    {ROLE_PREFERENCE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Favorite Scenarios */}
+              <div className="space-y-2">
+                <Label>好きなシナリオ（最大3つ）</Label>
+                <FavoriteScenarioPicker
+                  reports={userReports}
+                  selectedIds={favoriteReportIds}
+                  onChange={setFavoriteReportIds}
+                  max={3}
+                  disabled={saving}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Scenario Tendency Tags */}
+              <div className="space-y-2">
+                <Label>シナリオ傾向</Label>
+                <p className="text-xs text-muted-foreground">好きなシナリオの傾向を選択してください</p>
+                <TagToggleGroup
+                  options={SCENARIO_TENDENCY_TAGS}
+                  selected={scenarioTags}
+                  onChange={setScenarioTags}
+                  disabled={saving}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Play Style Tags */}
+              <div className="space-y-2">
+                <Label>得意な遊び方 / 好きな遊び方</Label>
+                <TagToggleGroup
+                  options={PLAY_STYLE_OPTIONS}
+                  selected={playStyleTags}
+                  onChange={setPlayStyleTags}
+                  disabled={saving}
+                />
+              </div>
+
+              {/* Play Style Other */}
+              <div className="space-y-2">
+                <Label>その他（自由入力）</Label>
+                <Input
+                  value={playStyleOther}
+                  onChange={(e) => setPlayStyleOther(e.target.value)}
+                  placeholder="例: 情報整理"
+                  disabled={saving}
+                  maxLength={20}
+                />
+              </div>
+
+              <Button
+                onClick={saveProfile}
+                disabled={saving || (usernameStatus !== 'unchanged' && usernameStatus !== 'available')}
                 className="gap-2"
               >
                 {saving ? (
@@ -592,8 +749,8 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>デフォルトの公開設定</Label>
-                <Select 
-                  value={privacySetting} 
+                <Select
+                  value={privacySetting}
                   onValueChange={(v: typeof privacySetting) => setPrivacySetting(v)}
                   disabled={saving}
                 >
@@ -675,6 +832,68 @@ export default function SettingsPage() {
               </Card>
 
               {profile && <DataExport userId={profile.id} disabled={saving} />}
+
+              {/* Scenario Preferences (Matching) */}
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Heart className="w-5 h-5 text-pink-500" />
+                        シナリオ希望
+                      </CardTitle>
+                      <CardDescription>
+                        マッチング機能で次の卓を見つける
+                      </CardDescription>
+                    </div>
+                    <XShareButton preferences={scenarioPreferences} size="sm" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {profile && (
+                    <ScenarioPreferenceManager userId={profile.id} profile={profile} />
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Ad Preference */}
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <EyeOff className="w-5 h-5" />
+                    広告設定
+                  </CardTitle>
+                  <CardDescription>
+                    配信者のおすすめ表示を管理
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">配信者広告を非表示</p>
+                      <p className="text-sm text-muted-foreground">
+                        ダッシュボードの配信者おすすめカードを非表示にする
+                      </p>
+                    </div>
+                    <Switch
+                      checked={hideStreamerAds}
+                      onCheckedChange={async (checked) => {
+                        setHideStreamerAds(checked)
+                        const supabase = createClient()
+                        await supabase
+                          .from('user_ad_preferences')
+                          .upsert({
+                            user_id: profile?.id,
+                            hide_streamer_ads: checked,
+                            updated_at: new Date().toISOString(),
+                          })
+                        toast.success('設定を更新しました')
+                      }}
+                      disabled={saving}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             </>
           ) : (
             <Card className="bg-card/50 border-border/50">

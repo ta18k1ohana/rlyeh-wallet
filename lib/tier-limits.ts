@@ -22,6 +22,10 @@ export const TIER_LIMITS = {
     canBeFollowed: false, // Only streamers can be followed
     hasProBadge: false,
     hasStreamerBadge: false,
+    // Pro Plan: Matching features
+    canUseMatching: false,
+    canHideAds: false,
+    maxScenarioPreferences: 0,
   },
   pro: {
     maxImages: 20,
@@ -43,6 +47,10 @@ export const TIER_LIMITS = {
     canBeFollowed: false,
     hasProBadge: true,
     hasStreamerBadge: false,
+    // Pro Plan: Matching features
+    canUseMatching: true,
+    canHideAds: true,
+    maxScenarioPreferences: 10,
   },
   streamer: {
     maxImages: 50,
@@ -64,6 +72,12 @@ export const TIER_LIMITS = {
     canBeFollowed: true,
     hasProBadge: true,
     hasStreamerBadge: true,
+    // Pro Plan: Matching features (inherited)
+    canUseMatching: true,
+    canHideAds: true,
+    maxScenarioPreferences: 10,
+    // Streamer Plan: Ad distribution
+    canDistributeAds: true,
   },
 } as const
 
@@ -88,11 +102,11 @@ export function hasReachedLimit(
 ): boolean {
   const limits = getProfileLimits(profile)
   const limit = limits[limitKey]
-  
+
   if (typeof limit === 'number') {
     return currentValue >= limit
   }
-  
+
   return false
 }
 
@@ -103,7 +117,7 @@ export function canUseFeature(
 ): boolean {
   const limits = getProfileLimits(profile)
   const feature = limits[featureKey]
-  
+
   return feature === true
 }
 
@@ -115,11 +129,11 @@ export function getRemainingCount(
 ): number {
   const limits = getProfileLimits(profile)
   const limit = limits[limitKey]
-  
+
   if (typeof limit === 'number') {
     return Math.max(0, limit - currentValue)
   }
-  
+
   return 0
 }
 
@@ -141,22 +155,22 @@ export const TIER_PRICING: Record<UserTier, number> = {
 export function isTierActive(profile: Profile | null | undefined): boolean {
   if (!profile) return false
   if (profile.tier === 'free') return true
-  
+
   if (profile.tier_expires_at) {
     return new Date(profile.tier_expires_at) > new Date()
   }
-  
+
   return true
 }
 
 // Get effective tier (considering expiration)
 export function getEffectiveTier(profile: Profile | null | undefined): UserTier {
   if (!profile) return 'free'
-  
+
   if (!isTierActive(profile)) {
     return 'free'
   }
-  
+
   return profile.tier || 'free'
 }
 

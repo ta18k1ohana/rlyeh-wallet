@@ -24,6 +24,11 @@ export interface Profile {
   accept_fusetter: boolean
   require_mention_approval: boolean
   twitter_id: string | null
+  role_preference: 'pl_main' | 'gm_main' | 'both' | null
+  favorite_report_ids: string[]
+  scenario_tags: string[]
+  play_style_tags: string[]
+  play_style_other: string | null
   created_at: string
   updated_at: string
 }
@@ -234,3 +239,44 @@ export interface ReportTag {
   sort_order?: number
   created_at: string
 }
+
+// =============================================
+// Pro Plan: Matching Feature Types
+// =============================================
+
+export type ScenarioPreferenceType = 'want_to_play' | 'can_run'
+
+export interface ScenarioPreference {
+  id: string
+  user_id: string
+  scenario_name: string
+  scenario_author: string | null
+  preference_type: ScenarioPreferenceType
+  created_at: string
+}
+
+// =============================================
+// Streamer Plan: Ad Feature Types
+// =============================================
+
+export interface UserAdPreferences {
+  user_id: string
+  hide_streamer_ads: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface StreamerAdImpression {
+  id: string
+  play_report_id: string
+  viewer_user_id: string | null
+  impression_type: 'view' | 'click' | 'dismiss'
+  created_at: string
+}
+
+// Streamer ad card display data
+export interface StreamerAdCard {
+  report: PlayReport
+  streamer: Profile
+}
+

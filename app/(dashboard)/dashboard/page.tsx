@@ -1,12 +1,40 @@
 import React from "react"
 import { createClient } from '@/lib/supabase/server'
 import { DashboardFeed } from '@/components/dashboard-feed'
+import { MatchingRecommendations } from '@/components/matching-recommendations'
+import { StreamerAdCard } from '@/components/streamer-ad-card'
+import { ScenarioPreferenceManager } from '@/components/scenario-preference-manager'
+import { XShareButton } from '@/components/x-share-button'
+import { getProfileLimits, canUseFeature } from '@/lib/tier-limits'
+import type { PlayReport, Profile, ScenarioPreference } from '@/lib/types'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) return null
+
+  // Get user profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  const limits = getProfileLimits(profile)
+  const canUseMatching = canUseFeature(profile, 'canUseMatching')
+  const canHideAds = canUseFeature(profile, 'canHideAds')
+
+  // Get user's ad preferences
+  let hideStreamerAds = false
+  if (canHideAds) {
+    const { data: adPrefs } = await supabase
+      .from('user_ad_preferences')
+      .select('hide_streamer_ads')
+      .eq('user_id', user.id)
+      .single()
+    hideStreamerAds = adPrefs?.hide_streamer_ads || false
+  }
 
   // Get user's play history for recommendations
   const { data: userReports } = await supabase
@@ -44,6 +72,103 @@ export default async function DashboardPage() {
       .not('following_id', 'eq', user.id)
 
     friendsOfFriendIds = fofData?.map(f => f.following_id).filter(id => !friendIds.includes(id)) || []
+  }
+
+  // =============================================
+  // Pro Feature: Matching Recommendations
+  // =============================================
+  let kpReports: PlayReport[] = []
+  let interestedPlayers: { profile: Profile; scenarioName: string }[] = []
+  let scenarioPreferences: ScenarioPreference[] = []
+
+  if (canUseMatching) {
+    // Get user's scenario preferences
+    const { data: prefs } = await supabase
+      .from('scenario_preferences')
+      .select('*')
+      .eq('user_id', user.id)
+
+    scenarioPreferences = prefs || []
+
+    const wantToPlay = scenarioPreferences.filter(p => p.preference_type === 'want_to_play')
+    const canRun = scenarioPreferences.filter(p => p.preference_type === 'can_run')
+
+    // Get KP reports for "want to play" scenarios
+    if (wantToPlay.length > 0) {
+      const scenarioNames = wantToPlay.map(p => p.scenario_name)
+
+      const { data: kpData } = await supabase
+        .from('play_reports')
+        .select(`
+          *,
+          profile:profiles!play_reports_user_id_fkey(id, username, display_name, avatar_url),
+          participants:play_report_participants(role, user_id)
+        `)
+        .in('scenario_name', scenarioNames)
+        .eq('privacy_setting', 'public')
+        .neq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      // Filter to only KP reports
+      kpReports = (kpData || []).filter(report =>
+        report.participants?.some((p: any) => p.role === 'KP' && p.user_id === report.user_id)
+      )
+    }
+
+    // Get interested players for "can run" scenarios
+    if (canRun.length > 0) {
+      const scenarioNames = canRun.map(p => p.scenario_name)
+
+      const { data: playerPrefs } = await supabase
+        .from('scenario_preferences')
+        .select(`
+          scenario_name,
+          profile:profiles!scenario_preferences_user_id_fkey(*)
+        `)
+        .in('scenario_name', scenarioNames)
+        .eq('preference_type', 'want_to_play')
+        .neq('user_id', user.id)
+        .limit(10)
+
+      interestedPlayers = (playerPrefs || []).map(p => ({
+        profile: p.profile as unknown as Profile,
+        scenarioName: p.scenario_name,
+      })).filter(p => p.profile)
+    }
+  }
+
+  // =============================================
+  // Streamer Ads (for non-Pro users)
+  // =============================================
+  let streamerAds: { report: PlayReport; streamer: Profile }[] = []
+
+  if (!hideStreamerAds) {
+    // Get random streamer reports from the last 30 days
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const { data: streamerReports } = await supabase
+      .from('play_reports')
+      .select(`
+        *,
+        profile:profiles!play_reports_user_id_fkey(*)
+      `)
+      .eq('privacy_setting', 'public')
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .neq('user_id', user.id)
+      .limit(20)
+
+    // Filter to streamer reports and shuffle
+    const streamerOnlyReports = (streamerReports || [])
+      .filter(r => (r.profile as any)?.is_streamer === true)
+
+    // Random shuffle and take 2
+    const shuffled = streamerOnlyReports.sort(() => Math.random() - 0.5)
+    streamerAds = shuffled.slice(0, 2).map(r => ({
+      report: r as PlayReport,
+      streamer: r.profile as unknown as Profile,
+    }))
   }
 
   // Recommendation scoring on recent public reports
@@ -149,6 +274,34 @@ export default async function DashboardPage() {
         <h1 className="text-2xl md:text-3xl font-bold">ダッシュボード</h1>
         <p className="text-muted-foreground">最新の通過報告をチェック</p>
       </div>
+
+      {/* Streamer Ads (for non-hiding users) */}
+      {streamerAds.length > 0 && (
+        <div className="space-y-4">
+          {streamerAds.map((ad, index) => (
+            <StreamerAdCard
+              key={ad.report.id}
+              report={ad.report}
+              streamer={ad.streamer}
+              canHideAds={canHideAds}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Pro Feature: Matching Recommendations */}
+      {canUseMatching && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">マッチング</h2>
+            <XShareButton preferences={scenarioPreferences} size="sm" />
+          </div>
+          <MatchingRecommendations
+            kpReports={kpReports}
+            interestedPlayers={interestedPlayers}
+          />
+        </div>
+      )}
 
       <DashboardFeed
         initialFriendReports={friendsReports}

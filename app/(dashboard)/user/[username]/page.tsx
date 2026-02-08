@@ -17,6 +17,7 @@ import type { Profile, PlayReport } from '@/lib/types'
 import { TierBadge } from '@/components/tier-badge'
 import StatCard from '@/components/stat-card'
 import { ActivityTimeline } from '@/components/activity-timeline'
+import { TrpgPreferenceDisplay } from '@/components/trpg-preference-display'
 
 interface UserStats {
   totalSessions: number
@@ -165,6 +166,8 @@ export default function UserProfilePage() {
     totalHours: 0,
     survivalRate: 0,
   })
+  const [statsTab, setStatsTab] = useState<'stats' | 'profile'>('stats')
+  const [favoriteReports, setFavoriteReports] = useState<PlayReport[]>([])
 
   useEffect(() => {
     async function fetchData() {
@@ -405,6 +408,18 @@ export default function UserProfilePage() {
           totalHours,
           survivalRate,
         })
+      }
+
+      // Fetch favorite reports for TRPG profile display
+      if (profileData.favorite_report_ids?.length > 0) {
+        const { data: favReports } = await supabase
+          .from('play_reports')
+          .select('id, scenario_name, cover_image_url')
+          .in('id', profileData.favorite_report_ids)
+
+        if (favReports) {
+          setFavoriteReports(favReports as PlayReport[])
+        }
       }
 
       setLoading(false)
@@ -654,14 +669,45 @@ export default function UserProfilePage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard icon={<BookOpen className="w-4 h-4" />} label="総セッション" value={stats.totalSessions} />
-        <StatCard icon={<Users className="w-4 h-4" />} label="KP回数" value={stats.asKP} />
-        <StatCard icon={<Trophy className="w-4 h-4" />} label="PL回数" value={stats.asPL} />
-        <StatCard icon={<BookOpen className="w-4 h-4" />} label="シナリオ数" value={stats.uniqueScenarios} />
-        <StatCard icon={<Clock className="w-4 h-4" />} label="総プレイ時間" value={`${stats.totalHours.toFixed(0)}h`} />
-        <StatCard icon={<Percent className="w-4 h-4" />} label="生還率" value={`${stats.survivalRate}%`} />
+      {/* Stats / Profile Tab Switcher */}
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setStatsTab('stats')}
+            className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+              statsTab === 'stats'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            統計
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatsTab('profile')}
+            className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+              statsTab === 'profile'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            プロフィール
+          </button>
+        </div>
+
+        {statsTab === 'stats' ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <StatCard icon={<BookOpen className="w-4 h-4" />} label="総セッション" value={stats.totalSessions} />
+            <StatCard icon={<Users className="w-4 h-4" />} label="KP回数" value={stats.asKP} />
+            <StatCard icon={<Trophy className="w-4 h-4" />} label="PL回数" value={stats.asPL} />
+            <StatCard icon={<BookOpen className="w-4 h-4" />} label="シナリオ数" value={stats.uniqueScenarios} />
+            <StatCard icon={<Clock className="w-4 h-4" />} label="総プレイ時間" value={`${stats.totalHours.toFixed(0)}h`} />
+            <StatCard icon={<Percent className="w-4 h-4" />} label="生還率" value={`${stats.survivalRate}%`} />
+          </div>
+        ) : (
+          <TrpgPreferenceDisplay profile={profile} favoriteReports={favoriteReports} />
+        )}
       </div>
 
       {/* Collection & Timeline */}
