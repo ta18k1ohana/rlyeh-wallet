@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
 import type { UserTier } from '@/lib/types'
 
-// Use service role for webhook to bypass RLS
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy-initialize to avoid build-time errors when env vars aren't available
+let _supabaseAdmin: SupabaseClient | null = null
+function getSupabaseAdmin() {
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+  }
+  return _supabaseAdmin
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text()
@@ -85,7 +91,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   }
 
   // Update user profile with subscription info
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('profiles')
     .update({
       tier,
@@ -109,7 +115,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   if (!userId) {
     // Try to find user by customer ID
     const customerId = subscription.customer as string
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await getSupabaseAdmin()
       .from('profiles')
       .select('id')
       .eq('stripe_customer_id', customerId)
@@ -136,7 +142,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
       }
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
       .from('profiles')
       .update({
         tier: status === 'active' ? subscriptionTier : 'free',
@@ -156,7 +162,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString()
   const status = subscription.status
 
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('profiles')
     .update({
       tier: status === 'active' ? (tier || 'pro') : 'free',
@@ -175,7 +181,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string
 
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await getSupabaseAdmin()
     .from('profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
@@ -187,7 +193,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   }
 
   // Downgrade to free tier
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('profiles')
     .update({
       tier: 'free',
@@ -216,14 +222,14 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const customerId = invoice.customer as string
   
   // Optionally create a notification for the user
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await getSupabaseAdmin()
     .from('profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
     .single()
 
   if (profile) {
-    await supabaseAdmin
+    await getSupabaseAdmin()
       .from('notifications')
       .insert({
         user_id: profile.id,
