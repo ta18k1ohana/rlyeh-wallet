@@ -418,7 +418,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <>
+    <div className="-my-6">
       {/* Main Feed Area - X/Twitter-style 600px column */}
       <div className="min-h-screen max-w-[600px] mx-auto border-x border-border/50">
         {/* Header */}
@@ -489,7 +489,7 @@ export default async function DashboardPage() {
         dailyCounts={dailyCounts}
         activeFriends={activeFriends}
       />
-    </>
+    </div>
   )
 }
 

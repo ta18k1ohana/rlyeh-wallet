@@ -337,7 +337,7 @@ export default function NotificationsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-[600px] mx-auto border-x border-border/50 min-h-screen">
+      <div className="-my-6 max-w-[600px] mx-auto border-x border-border/50 min-h-screen">
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-3">
           <h1 className="text-xl font-bold">通知</h1>
         </div>
@@ -349,7 +349,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="max-w-[600px] mx-auto border-x border-border/50 min-h-screen">
+    <div className="-my-6 max-w-[600px] mx-auto border-x border-border/50 min-h-screen">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50">
         <div className="px-4 py-3">
