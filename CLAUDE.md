@@ -10,7 +10,7 @@ R'lyeh Wallet (ルルイエウォレット) is a Japanese-language TRPG session 
 - **Database:** Supabase (PostgreSQL + Auth + Realtime)
 - **UI:** shadcn/ui + Radix UI + Tailwind CSS v4
 - **Payments:** Stripe (subscriptions)
-- **Storage:** Vercel Blob (images)
+- **Storage:** Supabase Storage (images)
 - **Source:** Built with v0.app
 
 ## Project Structure
@@ -76,9 +76,6 @@ SUPABASE_SERVICE_ROLE_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
-
-# Vercel Blob
-BLOB_READ_WRITE_TOKEN=
 
 # App URL
 NEXT_PUBLIC_APP_URL=
