@@ -3,8 +3,16 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardFeed } from '@/components/dashboard-feed'
 import { MatchingRecommendations } from '@/components/matching-recommendations'
 import { StreamerAdCard } from '@/components/streamer-ad-card'
-import { ScenarioPreferenceManager } from '@/components/scenario-preference-manager'
 import { XShareButton } from '@/components/x-share-button'
+import { TrendingScenarios } from '@/components/trending-scenarios'
+import {
+  WelcomeHeader,
+  MilestoneBanner,
+  WeeklyActivity,
+  ActiveFriends,
+  InvestigatorRank,
+  MythosTip,
+} from '@/components/dashboard-widgets'
 import { getProfileLimits, canUseFeature } from '@/lib/tier-limits'
 import type { PlayReport, Profile, ScenarioPreference } from '@/lib/types'
 
@@ -36,14 +44,86 @@ export default async function DashboardPage() {
     hideStreamerAds = adPrefs?.hide_streamer_ads || false
   }
 
-  // Get user's play history for recommendations
+  // Get user's play history for recommendations AND statistics
   const { data: userReports } = await supabase
     .from('play_reports')
-    .select('scenario_name, scenario_author')
+    .select('scenario_name, scenario_author, created_at')
     .eq('user_id', user.id)
 
   const playedScenarios = new Set(userReports?.map(r => r.scenario_name) || [])
   const playedAuthors = new Set(userReports?.map(r => r.scenario_author).filter(Boolean) || [])
+
+  // Statistics calculations
+  const totalReports = userReports?.length || 0
+  const uniqueScenarios = playedScenarios.size
+  const uniqueAuthors = playedAuthors.size
+
+  // This month's reports
+  const now = new Date()
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const thisMonthReports = userReports?.filter(r =>
+    new Date(r.created_at) >= thisMonthStart
+  ).length || 0
+
+  // =============================================
+  // Daily activity heatmap (last 28 days)
+  // =============================================
+  const dailyCounts: number[] = []
+  for (let i = 27; i >= 0; i--) {
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+    const dayEnd = new Date(dayStart)
+    dayEnd.setDate(dayEnd.getDate() + 1)
+    const count = userReports?.filter(r => {
+      const d = new Date(r.created_at)
+      return d >= dayStart && d < dayEnd
+    }).length || 0
+    dailyCounts.push(count)
+  }
+
+  // =============================================
+  // Weekly streak (consecutive weeks with at least 1 report)
+  // =============================================
+  let streak = 0
+  for (let w = 0; w < 52; w++) {
+    const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - w * 7)
+    const weekStart = new Date(weekEnd)
+    weekStart.setDate(weekStart.getDate() - 7)
+    const hasActivity = userReports?.some(r => {
+      const d = new Date(r.created_at)
+      return d >= weekStart && d < weekEnd
+    })
+    if (hasActivity) {
+      streak++
+    } else {
+      break
+    }
+  }
+
+  // =============================================
+  // Survival rate for SAN値 calculation
+  // =============================================
+  const { data: userParticipants } = await supabase
+    .from('play_report_participants')
+    .select('role, result, user_id')
+    .eq('user_id', user.id)
+
+  let plSessions = 0
+  let surviveCount = 0
+  userParticipants?.forEach(p => {
+    if (p.role === 'PL') {
+      if (p.result === 'survive' || p.result === 'dead' || p.result === 'insane') {
+        plSessions++
+        if (p.result === 'survive') surviveCount++
+      }
+    }
+  })
+  const survivalRate = plSessions > 0 ? Math.round((surviveCount / plSessions) * 100) : 100
+
+  // SAN値: Based on survival rate and activity — fun gamification
+  // Higher survival rate = higher SAN, active play keeps it up
+  const baseSan = survivalRate
+  const activityBonus = Math.min(thisMonthReports * 3, 15) // up to +15 for being active
+  const sanity = Math.max(1, Math.min(99, baseSan + activityBonus - (plSessions === 0 ? 30 : 0)))
 
   // Get friends (mutual follows)
   const { data: following } = await supabase
@@ -62,6 +142,41 @@ export default async function DashboardPage() {
   // Mutual friends
   const friendIds = followingIds.filter(id => followerIds.includes(id))
 
+  // =============================================
+  // Active friends — recent activity
+  // =============================================
+  let activeFriends: { profile: Profile; lastActive: string; recentScenario?: string }[] = []
+  if (friendIds.length > 0) {
+    const { data: friendProfiles } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', friendIds.slice(0, 20))
+
+    // Get most recent report from each friend
+    const { data: friendRecentReports } = await supabase
+      .from('play_reports')
+      .select('user_id, scenario_name, created_at')
+      .in('user_id', friendIds.slice(0, 20))
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    const friendLatestMap = new Map<string, { scenario: string; date: string }>()
+    friendRecentReports?.forEach(r => {
+      if (!friendLatestMap.has(r.user_id)) {
+        friendLatestMap.set(r.user_id, { scenario: r.scenario_name, date: r.created_at })
+      }
+    })
+
+    activeFriends = (friendProfiles || [])
+      .map(fp => ({
+        profile: fp as Profile,
+        lastActive: friendLatestMap.get(fp.id)?.date || fp.updated_at,
+        recentScenario: friendLatestMap.get(fp.id)?.scenario,
+      }))
+      .sort((a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime())
+      .slice(0, 5)
+  }
+
   // Get friends of friends for recommendations
   let friendsOfFriendIds: string[] = []
   if (friendIds.length > 0) {
@@ -73,6 +188,40 @@ export default async function DashboardPage() {
 
     friendsOfFriendIds = fofData?.map(f => f.following_id).filter(id => !friendIds.includes(id)) || []
   }
+
+  // =============================================
+  // Trending Scenarios (this month)
+  // =============================================
+  const { data: trendingData } = await supabase
+    .from('play_reports')
+    .select('scenario_name, scenario_author')
+    .eq('privacy_setting', 'public')
+    .gte('created_at', thisMonthStart.toISOString())
+
+  // Count scenario popularity
+  const scenarioCounts = new Map<string, { name: string; author: string | null; count: number }>()
+  for (const report of (trendingData || [])) {
+    const key = report.scenario_name
+    const existing = scenarioCounts.get(key)
+    if (existing) {
+      existing.count++
+    } else {
+      scenarioCounts.set(key, {
+        name: report.scenario_name,
+        author: report.scenario_author,
+        count: 1,
+      })
+    }
+  }
+
+  // Sort by count and take top 5
+  const trendingScenarios = Array.from(scenarioCounts.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+    .map((s, i) => ({
+      ...s,
+      trend: i === 0 ? 'up' as const : s.count >= 3 ? 'up' as const : 'stable' as const,
+    }))
 
   // =============================================
   // Pro Feature: Matching Recommendations
@@ -161,7 +310,7 @@ export default async function DashboardPage() {
 
     // Filter to streamer reports and shuffle
     const streamerOnlyReports = (streamerReports || [])
-      .filter(r => (r.profile as any)?.is_streamer === true)
+      .filter(r => (r.profile as any)?.tier === 'streamer')
 
     // Random shuffle and take 2
     const shuffled = streamerOnlyReports.sort(() => Math.random() - 0.5)
@@ -246,7 +395,7 @@ export default async function DashboardPage() {
       .from('profiles')
       .select('id')
       .in('id', nonMutualFollowingIds)
-      .eq('is_streamer', true)
+      .eq('tier', 'streamer')
 
     streamerIds = streamerProfiles?.map(p => p.id) || []
 
@@ -255,7 +404,7 @@ export default async function DashboardPage() {
         .from('play_reports')
         .select(`
           *,
-          profile:profiles!play_reports_user_id_fkey(id, username, display_name, avatar_url, is_streamer),
+          profile:profiles!play_reports_user_id_fkey(id, username, display_name, avatar_url, tier),
           participants:play_report_participants(*, profile:profiles(id, username, display_name, avatar_url)),
           likes:likes(id)
         `)
@@ -269,48 +418,150 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">ダッシュボード</h1>
-        <p className="text-muted-foreground">最新の通過報告をチェック</p>
+    <>
+      {/* Main Feed Area - X/Twitter-style 600px column */}
+      <div className="min-h-screen max-w-[600px] mx-auto border-x border-border/50">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-3">
+          <h1 className="text-xl font-bold">ホーム</h1>
+        </div>
+
+        {/* Welcome Header — greeting + quick stats */}
+        <WelcomeHeader
+          displayName={profile?.display_name || profile?.username || '探索者'}
+          totalReports={totalReports}
+          thisMonthReports={thisMonthReports}
+          streak={streak}
+          sanity={sanity}
+        />
+
+        {/* Milestone celebration banner */}
+        <MilestoneBanner totalReports={totalReports} />
+
+        {/* Streamer Ads (for non-hiding users) - inline */}
+        {streamerAds.length > 0 && (
+          <div className="p-4 border-b border-border/50">
+            {streamerAds.slice(0, 1).map((ad) => (
+              <StreamerAdCard
+                key={ad.report.id}
+                report={ad.report}
+                streamer={ad.streamer}
+                canHideAds={canHideAds}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Pro Feature: Matching Recommendations - compact inline */}
+        {canUseMatching && (kpReports.length > 0 || interestedPlayers.length > 0) && (
+          <div className="p-4 border-b border-border/50">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold">マッチング</h2>
+              <XShareButton preferences={scenarioPreferences} size="sm" />
+            </div>
+            <MatchingRecommendations
+              kpReports={kpReports}
+              interestedPlayers={interestedPlayers}
+            />
+          </div>
+        )}
+
+        {/* Main Feed */}
+        <DashboardFeed
+          initialFriendReports={friendsReports}
+          initialFollowingReports={followingReports}
+          recommendedReports={recommendedReports}
+          friendIds={friendIds}
+          streamerIds={streamerIds}
+          userId={user.id}
+        />
       </div>
 
-      {/* Streamer Ads (for non-hiding users) */}
-      {streamerAds.length > 0 && (
-        <div className="space-y-4">
-          {streamerAds.map((ad, index) => (
-            <StreamerAdCard
-              key={ad.report.id}
-              report={ad.report}
-              streamer={ad.streamer}
-              canHideAds={canHideAds}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Pro Feature: Matching Recommendations */}
-      {canUseMatching && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">マッチング</h2>
-            <XShareButton preferences={scenarioPreferences} size="sm" />
-          </div>
-          <MatchingRecommendations
-            kpReports={kpReports}
-            interestedPlayers={interestedPlayers}
-          />
-        </div>
-      )}
-
-      <DashboardFeed
-        initialFriendReports={friendsReports}
-        initialFollowingReports={followingReports}
-        recommendedReports={recommendedReports}
-        friendIds={friendIds}
-        streamerIds={streamerIds}
-        userId={user.id}
+      {/* Right Sidebar Content */}
+      <RightSidebarContent
+        totalReports={totalReports}
+        thisMonthReports={thisMonthReports}
+        friendsCount={friendIds.length}
+        uniqueAuthors={uniqueAuthors}
+        uniqueScenarios={uniqueScenarios}
+        survivalRate={survivalRate}
+        trendingScenarios={trendingScenarios}
+        dailyCounts={dailyCounts}
+        activeFriends={activeFriends}
       />
+    </>
+  )
+}
+
+// Right Sidebar Content Component
+function RightSidebarContent({
+  totalReports,
+  thisMonthReports,
+  friendsCount,
+  uniqueAuthors,
+  uniqueScenarios,
+  survivalRate,
+  trendingScenarios,
+  dailyCounts,
+  activeFriends,
+}: {
+  totalReports: number
+  thisMonthReports: number
+  friendsCount: number
+  uniqueAuthors: number
+  uniqueScenarios: number
+  survivalRate: number
+  trendingScenarios: { name: string; author: string | null; count: number; trend: 'up' | 'new' | 'stable' }[]
+  dailyCounts: number[]
+  activeFriends: { profile: any; lastActive: string; recentScenario?: string }[]
+}) {
+  return (
+    <div className="hidden lg:block fixed right-0 top-0 w-[350px] h-screen overflow-y-auto px-4 py-4 border-l border-border/50 bg-background">
+      {/* Search */}
+      <div className="relative mb-4">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
+        </svg>
+        <input
+          placeholder="検索"
+          className="w-full pl-10 pr-4 py-2.5 rounded-full bg-muted/50 border-0 focus:ring-1 focus:ring-primary text-sm"
+        />
+      </div>
+
+      {/* Investigator Rank — gamification card */}
+      <InvestigatorRank
+        totalReports={totalReports}
+        survivalRate={survivalRate}
+        uniqueScenarios={uniqueScenarios}
+      />
+
+      {/* Weekly Activity Heatmap */}
+      <WeeklyActivity dailyCounts={dailyCounts} />
+
+      {/* Active Friends */}
+      <ActiveFriends friends={activeFriends} />
+
+      {/* Trending */}
+      {trendingScenarios.length > 0 && (
+        <TrendingScenarios scenarios={trendingScenarios} />
+      )}
+
+      {/* Mythos Tip — daily flavor text */}
+      <div className="mt-4">
+        <MythosTip />
+      </div>
+
+      {/* Footer */}
+      <div className="mt-4 text-xs text-muted-foreground space-y-2">
+        <div className="flex flex-wrap gap-x-2 gap-y-1">
+          <a href="/terms" className="hover:underline">利用規約</a>
+          <a href="/privacy" className="hover:underline">プライバシー</a>
+          <a href="/pricing" className="hover:underline">料金プラン</a>
+        </div>
+        <p>© 2025 R&apos;lyeh Wallet</p>
+      </div>
     </div>
   )
 }
+

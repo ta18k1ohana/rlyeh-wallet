@@ -14,7 +14,9 @@ import { ImageUpload, MultiImageUpload } from '@/components/image-upload'
 import { LinkManager, type ReportLink } from '@/components/link-manager'
 import { UserAutocomplete } from '@/components/user-autocomplete'
 import { ReportTagInput } from '@/components/report-tag-input'
-import { getProfileLimits } from '@/lib/tier-limits'
+import { YouTubeLinksEditor } from '@/components/youtube-embed'
+import { UpgradeBanner, UpgradeInlineWarning } from '@/components/upgrade-banner'
+import { getProfileLimits, canUseFeature } from '@/lib/tier-limits'
 import type { Profile, ReportTag } from '@/lib/types'
 import { 
   ArrowLeft, 
@@ -74,6 +76,8 @@ export default function EditReportPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
   const [tags, setTags] = useState<ReportTag[]>([])
+  const [privateNotes, setPrivateNotes] = useState('')
+  const [youtubeLinks, setYoutubeLinks] = useState<{ youtube_url: string; title: string; link_type: 'main' | 'clip' | 'playlist' }[]>([])
 
   useEffect(() => {
     async function loadReport() {
@@ -146,6 +150,7 @@ export default function EditReportPage() {
       setEndType(reportData.end_type || '')
       setEndDescription(reportData.end_description || '')
       setImpression(reportData.impression || '')
+      setPrivateNotes(reportData.private_notes || '')
       setPrivacySetting(reportData.privacy_setting)
       
       // Load links
@@ -173,6 +178,21 @@ if (reportData.participants && reportData.participants.length > 0) {
       // Load tags
       if (reportData.tags && reportData.tags.length > 0) {
         setTags(reportData.tags)
+      }
+
+      // Load YouTube links (Streamer feature)
+      const { data: ytLinks } = await supabase
+        .from('youtube_links')
+        .select('*')
+        .eq('play_report_id', id)
+        .order('sort_order', { ascending: true })
+
+      if (ytLinks && ytLinks.length > 0) {
+        setYoutubeLinks(ytLinks.map((yl: { youtube_url: string; title: string | null; link_type: string }) => ({
+          youtube_url: yl.youtube_url,
+          title: yl.title || '',
+          link_type: (yl.link_type || 'main') as 'main' | 'clip' | 'playlist',
+        })))
       }
 
       setLoading(false)
@@ -266,6 +286,7 @@ if (reportData.participants && reportData.participants.length > 0) {
           end_type: endType || null,
           end_description: endDescription || null,
           impression: impression || null,
+          private_notes: privateNotes || null,
           privacy_setting: privacySetting,
           updated_at: new Date().toISOString(),
         })
@@ -327,6 +348,27 @@ if (links.length > 0) {
             sort_order: index,
           }))
         )
+      }
+
+      // Save YouTube links (Streamer feature)
+      if (canUseFeature(profile, 'canUseYouTubeEmbed')) {
+        await supabase
+          .from('youtube_links')
+          .delete()
+          .eq('play_report_id', id)
+
+        const validYtLinks = youtubeLinks.filter(yl => yl.youtube_url.trim())
+        if (validYtLinks.length > 0) {
+          await supabase.from('youtube_links').insert(
+            validYtLinks.map((yl, index) => ({
+              play_report_id: id,
+              youtube_url: yl.youtube_url,
+              title: yl.title || null,
+              link_type: yl.link_type,
+              sort_order: index,
+            }))
+          )
+        }
       }
 
       toast.success('更新しました')
@@ -639,18 +681,67 @@ if (links.length > 0) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="impression">感想・メモ（自分だけに見える）</Label>
+              <Label htmlFor="impression">
+                感想・メモ
+                {canUseFeature(profile, 'canUseMarkdownMemo') && (
+                  <span className="text-xs text-muted-foreground ml-2">Markdown対応</span>
+                )}
+              </Label>
               <Textarea
                 id="impression"
                 value={impression}
                 onChange={(e) => setImpression(e.target.value)}
-                placeholder="自分だけに見える感想やメモを記入..."
-                rows={4}
+                placeholder={canUseFeature(profile, 'canUseMarkdownMemo')
+                  ? "Markdown記法が使えます（## 見出し、**太字**、- リスト など）"
+                  : "感想やメモを記入..."
+                }
+                rows={6}
                 disabled={saving}
               />
+              {!canUseFeature(profile, 'canUseMarkdownMemo') && profile?.tier === 'free' && (
+                <p className="text-xs text-muted-foreground">
+                  Proプラン以上でMarkdown記法が使えます
+                </p>
+              )}
             </div>
+
+            {/* Private Notes - Pro feature */}
+            {canUseFeature(profile, 'canUsePrivateNotes') && (
+              <div className="space-y-2">
+                <Label htmlFor="privateNotes">
+                  プライベートノート
+                  <span className="text-xs text-muted-foreground ml-2">自分だけに見える</span>
+                </Label>
+                <Textarea
+                  id="privateNotes"
+                  value={privateNotes}
+                  onChange={(e) => setPrivateNotes(e.target.value)}
+                  placeholder="ネタバレや個人的なメモなど、自分だけに見えるノート..."
+                  rows={3}
+                  disabled={saving}
+                  className="border-dashed"
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* YouTube Links - Streamer feature */}
+        {canUseFeature(profile, 'canUseYouTubeEmbed') && (
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader>
+              <CardTitle>YouTube動画</CardTitle>
+              <CardDescription>セッション動画や切り抜きを埋め込み</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <YouTubeLinksEditor
+                values={youtubeLinks}
+                onChange={setYoutubeLinks}
+                disabled={saving}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {/* Links */}
         <Card className="bg-card/50 border-border/50">

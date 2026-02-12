@@ -48,6 +48,8 @@ import { ScenarioPreferenceManager } from '@/components/scenario-preference-mana
 import { XShareButton } from '@/components/x-share-button'
 import { TagToggleGroup } from '@/components/tag-toggle-group'
 import { FavoriteScenarioPicker } from '@/components/favorite-scenario-picker'
+import { CustomThemeEditor } from '@/components/custom-theme-editor'
+import { MentionApprovalList } from '@/components/mention-approval'
 import { ROLE_PREFERENCE_OPTIONS, SCENARIO_TENDENCY_TAGS, PLAY_STYLE_OPTIONS } from '@/lib/trpg-preferences'
 import { Heart, EyeOff } from 'lucide-react'
 
@@ -102,6 +104,8 @@ export default function SettingsPage() {
   const [playStyleTags, setPlayStyleTags] = useState<string[]>([])
   const [playStyleOther, setPlayStyleOther] = useState('')
   const [userReports, setUserReports] = useState<PlayReport[]>([])
+  const [customTheme, setCustomTheme] = useState<Record<string, string> | null>(null)
+  const [mentionApprovals, setMentionApprovals] = useState<any[]>([])
 
   useEffect(() => {
     async function loadData() {
@@ -135,6 +139,7 @@ export default function SettingsPage() {
         setAcceptViewerComments(profileData.accept_viewer_comments || false)
         setAcceptFusetter(profileData.accept_fusetter || false)
         setRequireMentionApproval(profileData.require_mention_approval || false)
+        setCustomTheme(profileData.custom_theme || null)
         // TRPG preferences
         setRolePreference(profileData.role_preference || '')
         setFavoriteReportIds(profileData.favorite_report_ids || [])
@@ -174,6 +179,20 @@ export default function SettingsPage() {
 
       if (scenarioPrefs) {
         setScenarioPreferences(scenarioPrefs)
+      }
+
+      // Load mention approvals (Streamer feature)
+      if (profileData?.require_mention_approval) {
+        const { data: approvals } = await supabase
+          .from('mention_approvals')
+          .select('*, mentioned_by_user:profiles!mention_approvals_mentioned_by_user_id_fkey(id, username, display_name, avatar_url), play_report:play_reports(scenario_name)')
+          .eq('mentioned_user_id', user.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+
+        if (approvals) {
+          setMentionApprovals(approvals)
+        }
       }
 
       // Load notification settings
@@ -335,6 +354,7 @@ export default function SettingsPage() {
         custom_url_slug: customUrlSlug || null,
         header_image_url: headerImageUrl,
         mini_character_url: miniCharacterUrl,
+        custom_theme: customTheme,
         accept_viewer_comments: acceptViewerComments,
         accept_fusetter: acceptFusetter,
         require_mention_approval: requireMentionApproval,
@@ -991,6 +1011,59 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Custom Theme */}
+            {canUseFeature(profile, 'canUseCustomTheme') && (
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Palette className="w-5 h-5" />
+                    カスタムカラーテーマ
+                  </CardTitle>
+                  <CardDescription>
+                    プロフィールページの配色をカスタマイズ
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <CustomThemeEditor
+                    value={customTheme}
+                    onChange={setCustomTheme}
+                    disabled={saving}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Mention Approvals */}
+            {requireMentionApproval && (
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <AtSign className="w-5 h-5" />
+                    メンション承認
+                  </CardTitle>
+                  <CardDescription>
+                    承認待ちのメンションリクエスト
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <MentionApprovalList
+                    approvals={mentionApprovals}
+                    onApprovalChange={async () => {
+                      // Reload mention approvals
+                      const supabase = createClient()
+                      const { data } = await supabase
+                        .from('mention_approvals')
+                        .select('*, mentioned_by_user:profiles!mention_approvals_mentioned_by_user_id_fkey(id, username, display_name, avatar_url), play_report:play_reports(scenario_name)')
+                        .eq('mentioned_user_id', profile?.id)
+                        .eq('status', 'pending')
+                        .order('created_at', { ascending: false })
+                      setMentionApprovals(data || [])
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="bg-card/50 border-border/50">
               <CardHeader>

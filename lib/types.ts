@@ -29,6 +29,7 @@ export interface Profile {
   scenario_tags: string[]
   play_style_tags: string[]
   play_style_other: string | null
+  former_tier: 'pro' | 'streamer' | null
   created_at: string
   updated_at: string
 }
@@ -50,6 +51,7 @@ export interface PlayReport {
   share_code: string | null
   privacy_setting: 'public' | 'followers' | 'private'
   twitter_post_url: string | null
+  private_notes: string | null
   is_favorite: boolean
   folder_id: string | null
   folder_sort_order: number

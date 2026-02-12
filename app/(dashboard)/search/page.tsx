@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Hash, User, BookOpen, Loader2, SlidersHorizontal, LayoutGrid, List, UserPlus, UserCheck, Clock, Star, Tag } from 'lucide-react'
+import { Search, Hash, User, BookOpen, Loader2, LayoutGrid, List, UserPlus, UserCheck, Clock, Star, Tag } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { PlayRecordCard } from '@/components/play-record-card'
+import { SessionCard, SessionCardGrid } from '@/components/session-card'
 import { toast } from 'sonner'
 import type { PlayReport, Profile } from '@/lib/types'
 import { getProfileLimits } from '@/lib/tier-limits'
@@ -67,7 +67,7 @@ function SearchPageContent() {
   const [result, setResult] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'name_asc'>('date_desc')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [showFilters, setShowFilters] = useState(false)
+
 
   // Load popular tags
   async function loadPopularTags() {
@@ -118,13 +118,14 @@ function SearchPageContent() {
           .select(`
             *,
             profile:profiles!play_reports_user_id_fkey(username, display_name, avatar_url),
+            participants:play_report_participants(*),
             tags:report_tags(*)
           `)
           .eq('privacy_setting', 'public')
           .in('id', reportIds)
           .order('play_date_start', { ascending: false })
           .limit(30)
-        
+
         setTagSearchResults(reports || [])
       } else {
         setTagSearchResults([])
@@ -138,20 +139,21 @@ function SearchPageContent() {
     setTagQuery(tagName)
     startTransition(async () => {
       const supabase = createClient()
-      
+
       const { data: tagMatches } = await supabase
         .from('report_tags')
         .select('play_report_id')
         .eq('tag_name', tagName)
-      
+
       if (tagMatches && tagMatches.length > 0) {
         const reportIds = tagMatches.map(t => t.play_report_id)
-        
+
         const { data: reports } = await supabase
           .from('play_reports')
           .select(`
             *,
             profile:profiles!play_reports_user_id_fkey(username, display_name, avatar_url),
+            participants:play_report_participants(*),
             tags:report_tags(*)
           `)
           .eq('privacy_setting', 'public')
@@ -175,7 +177,7 @@ function SearchPageContent() {
     const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('is_streamer', true)
+      .eq('tier', 'streamer')
       .order('display_name', { ascending: true })
       .limit(50)
     
@@ -196,7 +198,8 @@ function SearchPageContent() {
         .select(`
           *,
           profile:profiles!play_reports_user_id_fkey(username, display_name, avatar_url),
-          participants:play_report_participants(*)
+          participants:play_report_participants(*),
+          tags:report_tags(*)
         `)
         .eq('privacy_setting', 'public')
         .or(`scenario_name.ilike.%${query}%,scenario_author.ilike.%${query}%`)
@@ -298,10 +301,10 @@ function SearchPageContent() {
         </TabsList>
 
         <TabsContent value="search" className="space-y-6">
-          {/* Search Form */}
-          <form onSubmit={handleSearch} className="space-y-4">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
+          {/* Search Form + Filters (always visible, unified with wallet) */}
+          <form onSubmit={handleSearch}>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   value={query}
@@ -311,15 +314,64 @@ function SearchPageContent() {
                   disabled={isPending}
                 />
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setShowFilters(!showFilters)}
-                className="bg-transparent"
-              >
-                <SlidersHorizontal className="w-4 h-4" />
-              </Button>
+
+              <Select value={edition} onValueChange={setEdition}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="システム" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全システム</SelectItem>
+                  <SelectItem value="coc6">CoC 6版</SelectItem>
+                  <SelectItem value="coc7">CoC 7版</SelectItem>
+                  <SelectItem value="new-cthulhu">新クトゥルフ</SelectItem>
+                  <SelectItem value="delta-green">Delta Green</SelectItem>
+                  <SelectItem value="other">その他</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={result} onValueChange={setResult}>
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue placeholder="結果" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全て</SelectItem>
+                  <SelectItem value="success">成功</SelectItem>
+                  <SelectItem value="failure">失敗</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={sortBy} onValueChange={(v: typeof sortBy) => setSortBy(v)}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="並び順" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date_desc">新しい順</SelectItem>
+                  <SelectItem value="date_asc">古い順</SelectItem>
+                  <SelectItem value="name_asc">名前順</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div className="flex border rounded-lg overflow-hidden">
+                <Button
+                  type="button"
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="icon"
+                  onClick={() => setViewMode('grid')}
+                  className="rounded-none h-9 w-9"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="icon"
+                  onClick={() => setViewMode('list')}
+                  className="rounded-none h-9 w-9"
+                >
+                  <List className="w-4 h-4" />
+                </Button>
+              </div>
+
               <Button type="submit" disabled={isPending || !query.trim()}>
                 {isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -328,68 +380,6 @@ function SearchPageContent() {
                 )}
               </Button>
             </div>
-
-            {/* Filters */}
-            {showFilters && (
-              <div className="flex flex-wrap items-center gap-3 p-4 rounded-lg bg-card/50 border border-border/50">
-                <Select value={edition} onValueChange={setEdition}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="システム" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全システム</SelectItem>
-                    <SelectItem value="coc6">CoC 6版</SelectItem>
-                    <SelectItem value="coc7">CoC 7版</SelectItem>
-                    <SelectItem value="new-cthulhu">新クトゥルフ</SelectItem>
-                    <SelectItem value="delta-green">Delta Green</SelectItem>
-                    <SelectItem value="other">その他</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={result} onValueChange={setResult}>
-                  <SelectTrigger className="w-[100px]">
-                    <SelectValue placeholder="結果" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全て</SelectItem>
-                    <SelectItem value="success">成功</SelectItem>
-                    <SelectItem value="failure">失敗</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={sortBy} onValueChange={(v: typeof sortBy) => setSortBy(v)}>
-                  <SelectTrigger className="w-[130px]">
-                    <SelectValue placeholder="並び順" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="date_desc">新しい順</SelectItem>
-                    <SelectItem value="date_asc">古い順</SelectItem>
-                    <SelectItem value="name_asc">名前順</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="flex border rounded-lg overflow-hidden ml-auto">
-                  <Button
-                    type="button"
-                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                    size="icon"
-                    onClick={() => setViewMode('grid')}
-                    className="rounded-none h-9 w-9"
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
-                    size="icon"
-                    onClick={() => setViewMode('list')}
-                    className="rounded-none h-9 w-9"
-                  >
-                    <List className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
           </form>
 
           {/* Results */}
@@ -402,7 +392,7 @@ function SearchPageContent() {
                     <User className="w-5 h-5 text-primary" />
                     ユーザー
                   </h2>
-                  <div className="grid gap-2">
+                  <div className="grid gap-3">
                     {searchResults.users.map((user) => (
                       <UserCard key={user.id} user={user} />
                     ))}
@@ -417,19 +407,28 @@ function SearchPageContent() {
                     <BookOpen className="w-5 h-5 text-primary" />
                     セッション記録 ({searchResults.reports.length}件)
                   </h2>
-                  <div className={viewMode === 'grid' 
-                    ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4'
-                    : 'space-y-3'
-                  }>
-                    {searchResults.reports.map(report => (
-                      <PlayRecordCard 
-                        key={report.id} 
-                        report={report} 
-                        viewMode={viewMode}
-                        showExpand={false}
-                      />
-                    ))}
-                  </div>
+                  {viewMode === 'grid' ? (
+                    <SessionCardGrid columns={4}>
+                      {searchResults.reports.map(report => (
+                        <SessionCard
+                          key={report.id}
+                          report={report}
+                          showAuthor
+                        />
+                      ))}
+                    </SessionCardGrid>
+                  ) : (
+                    <div className="space-y-3">
+                      {searchResults.reports.map(report => (
+                        <SessionCard
+                          key={report.id}
+                          report={report}
+                          showAuthor
+                          compact
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -515,16 +514,15 @@ function SearchPageContent() {
                     <Tag className="w-5 h-5 text-primary" />
                     検索結果 ({tagSearchResults.length}件)
                   </h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  <SessionCardGrid columns={4}>
                     {tagSearchResults.map(report => (
-                      <PlayRecordCard 
-                        key={report.id} 
-                        report={report} 
-                        viewMode="grid"
-                        showExpand={false}
+                      <SessionCard
+                        key={report.id}
+                        report={report}
+                        showAuthor
                       />
                     ))}
-                  </div>
+                  </SessionCardGrid>
                 </>
               ) : (
                 <Card className="bg-card/50 border-border/50">
@@ -799,7 +797,7 @@ function UserCard({ user }: { user: Profile }) {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="font-medium">{user.display_name || user.username}</p>
-                  {user.is_streamer && (
+                  {user.tier === 'streamer' && (
                     <span className="text-[10px] bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded flex items-center gap-1">
                       <Star className="w-3 h-3" />
                       配信者

@@ -1,14 +1,26 @@
 'use client'
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Bell, User, Share2, AtSign, Info, Heart, UserPlus, Check, X, Loader2 } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import {
+  Bell,
+  Heart,
+  UserPlus,
+  Users,
+  AtSign,
+  Share2,
+  Info,
+  Check,
+  X,
+  Loader2,
+  Filter,
+  BellOff,
+} from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { cn } from '@/lib/utils'
 
 interface NotificationItem {
   id: string
@@ -34,11 +46,110 @@ interface FriendRequest {
   status: string
 }
 
+type FilterType = 'all' | 'like' | 'follow' | 'mention' | 'friend_request'
+
+// Notification type config — color, icon, accent for each type
+const NOTIF_CONFIG: Record<string, {
+  icon: React.ReactNode
+  accentColor: string     // icon background
+  accentRing: string      // ring color for avatar
+  label: string
+}> = {
+  like: {
+    icon: <Heart className="w-4 h-4 text-red-500" />,
+    accentColor: 'bg-red-500/10',
+    accentRing: 'ring-red-500/30',
+    label: 'いいね',
+  },
+  follow: {
+    icon: <Users className="w-4 h-4 text-emerald-500" />,
+    accentColor: 'bg-emerald-500/10',
+    accentRing: 'ring-emerald-500/30',
+    label: 'フレンド',
+  },
+  friend_request: {
+    icon: <UserPlus className="w-4 h-4 text-blue-500" />,
+    accentColor: 'bg-blue-500/10',
+    accentRing: 'ring-blue-500/30',
+    label: '申請',
+  },
+  mention: {
+    icon: <AtSign className="w-4 h-4 text-amber-500" />,
+    accentColor: 'bg-amber-500/10',
+    accentRing: 'ring-amber-500/30',
+    label: 'メンション',
+  },
+  share_code: {
+    icon: <Share2 className="w-4 h-4 text-purple-500" />,
+    accentColor: 'bg-purple-500/10',
+    accentRing: 'ring-purple-500/30',
+    label: '共有',
+  },
+  system: {
+    icon: <Info className="w-4 h-4 text-muted-foreground" />,
+    accentColor: 'bg-muted',
+    accentRing: 'ring-border',
+    label: 'システム',
+  },
+}
+
+function formatRelativeTime(dateString: string): string {
+  const now = Date.now()
+  const date = new Date(dateString).getTime()
+  const diffMs = now - date
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+
+  if (diffSec < 60) return 'たった今'
+  if (diffMin < 60) return `${diffMin}分前`
+  if (diffHour < 24) return `${diffHour}時間前`
+  if (diffDay < 7) return `${diffDay}日前`
+  if (diffDay < 30) return `${Math.floor(diffDay / 7)}週間前`
+
+  const d = new Date(dateString)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+// Group notifications by date
+function groupByDate(notifications: NotificationItem[]): { label: string; items: NotificationItem[] }[] {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const thisWeekStart = new Date(today)
+  thisWeekStart.setDate(thisWeekStart.getDate() - 7)
+
+  const groups: { label: string; items: NotificationItem[] }[] = [
+    { label: '今日', items: [] },
+    { label: '昨日', items: [] },
+    { label: '今週', items: [] },
+    { label: 'それ以前', items: [] },
+  ]
+
+  for (const n of notifications) {
+    const d = new Date(n.created_at)
+    if (d >= today) {
+      groups[0].items.push(n)
+    } else if (d >= yesterday) {
+      groups[1].items.push(n)
+    } else if (d >= thisWeekStart) {
+      groups[2].items.push(n)
+    } else {
+      groups[3].items.push(n)
+    }
+  }
+
+  return groups.filter(g => g.items.length > 0)
+}
+
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
   const [pendingRequests, setPendingRequests] = useState<Map<string, FriendRequest>>(new Map())
   const [processingRequest, setProcessingRequest] = useState<string | null>(null)
+  const [filter, setFilter] = useState<FilterType>('all')
 
   useEffect(() => {
     async function loadNotifications() {
@@ -50,7 +161,6 @@ export default function NotificationsPage() {
         return
       }
 
-      // Fetch notifications
       const { data: notifs } = await supabase
         .from('notifications')
         .select(`
@@ -74,11 +184,11 @@ export default function NotificationsPage() {
             .in('id', unreadIds)
         }
 
-        // Fetch pending friend requests for friend_request notifications
+        // Fetch pending friend requests
         const friendRequestNotifs = notifs.filter(n => n.type === 'friend_request' && n.from_user_id)
         if (friendRequestNotifs.length > 0) {
           const fromUserIds = friendRequestNotifs.map(n => n.from_user_id).filter(Boolean)
-          
+
           const { data: requests } = await supabase
             .from('friend_requests')
             .select('*')
@@ -110,7 +220,6 @@ export default function NotificationsPage() {
     if (!user) return
 
     try {
-      // Update friend request status to accepted
       const { error: updateError } = await supabase
         .from('friend_requests')
         .update({ status: 'accepted', updated_at: new Date().toISOString() })
@@ -120,8 +229,6 @@ export default function NotificationsPage() {
 
       if (updateError) throw updateError
 
-      // Create mutual follows (both directions for friendship)
-      // Check if follow already exists before inserting
       const { data: existingFollow1 } = await supabase
         .from('follows')
         .select('id')
@@ -150,7 +257,6 @@ export default function NotificationsPage() {
         if (follow2Error) throw follow2Error
       }
 
-      // Notify the requester that their request was accepted
       await supabase
         .from('notifications')
         .insert({
@@ -159,7 +265,6 @@ export default function NotificationsPage() {
           from_user_id: user.id,
         })
 
-      // Remove from pending requests
       setPendingRequests(prev => {
         const newMap = new Map(prev)
         newMap.delete(fromUserId)
@@ -183,7 +288,6 @@ export default function NotificationsPage() {
     if (!user) return
 
     try {
-      // Update friend request status to rejected
       const { error } = await supabase
         .from('friend_requests')
         .update({ status: 'rejected', updated_at: new Date().toISOString() })
@@ -193,7 +297,6 @@ export default function NotificationsPage() {
 
       if (error) throw error
 
-      // Remove from pending requests
       setPendingRequests(prev => {
         const newMap = new Map(prev)
         newMap.delete(fromUserId)
@@ -209,147 +312,355 @@ export default function NotificationsPage() {
     }
   }
 
-  const notificationIcons: Record<string, React.ReactNode> = {
-    mention: <AtSign className="w-4 h-4" />,
-    share_code: <Share2 className="w-4 h-4" />,
-    follow: <User className="w-4 h-4" />,
-    like: <Heart className="w-4 h-4" />,
-    friend_request: <UserPlus className="w-4 h-4" />,
-    system: <Info className="w-4 h-4" />,
-  }
+  // Filter notifications
+  const filteredNotifications = useMemo(() => {
+    if (filter === 'all') return notifications
+    return notifications.filter(n => n.type === filter)
+  }, [notifications, filter])
 
-  const getNotificationMessage = (n: NotificationItem): string => {
-    const name = n.from_user?.display_name || n.from_user?.username || '誰か'
-    switch (n.type) {
-      case 'mention':
-        return `${name}があなたを「${n.play_report?.scenario_name}」でメンションしました`
-      case 'share_code':
-        return `${name}が「${n.play_report?.scenario_name}」を共有しました`
-      case 'follow':
-        return `${name}があなたとフレンドになりました`
-      case 'like':
-        return `${name}が「${n.play_report?.scenario_name}」にいいねしました`
-      case 'friend_request':
-        return `${name}からフレンド申請が届きました`
-      default:
-        return 'お知らせ'
-    }
-  }
+  // Group by date
+  const groupedNotifications = useMemo(() => {
+    return groupByDate(filteredNotifications)
+  }, [filteredNotifications])
+
+  // Count unread
+  const unreadCount = notifications.filter(n => !n.is_read).length
+
+  // Count by type for filter badges
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    notifications.forEach(n => {
+      counts[n.type] = (counts[n.type] || 0) + 1
+    })
+    return counts
+  }, [notifications])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      <div className="max-w-[600px] mx-auto border-x border-border/50 min-h-screen">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50 px-4 py-3">
+          <h1 className="text-xl font-bold">通知</h1>
+        </div>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[600px] mx-auto border-x border-border/50 min-h-screen">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          <Bell className="w-7 h-7 text-primary" />
-          通知
-        </h1>
-        <p className="text-muted-foreground">フレンド申請、いいね、メンションの通知</p>
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/50">
+        <div className="px-4 py-3">
+          <h1 className="text-xl font-bold">通知</h1>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="flex px-1 overflow-x-auto">
+          <FilterTab
+            active={filter === 'all'}
+            onClick={() => setFilter('all')}
+            count={notifications.length}
+          >
+            すべて
+          </FilterTab>
+          <FilterTab
+            active={filter === 'like'}
+            onClick={() => setFilter('like')}
+            count={typeCounts['like'] || 0}
+            color="text-red-500"
+          >
+            <Heart className="w-3.5 h-3.5" />
+            いいね
+          </FilterTab>
+          <FilterTab
+            active={filter === 'friend_request'}
+            onClick={() => setFilter('friend_request')}
+            count={typeCounts['friend_request'] || 0}
+            color="text-blue-500"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            申請
+          </FilterTab>
+          <FilterTab
+            active={filter === 'mention'}
+            onClick={() => setFilter('mention')}
+            count={typeCounts['mention'] || 0}
+            color="text-amber-500"
+          >
+            <AtSign className="w-3.5 h-3.5" />
+            メンション
+          </FilterTab>
+          <FilterTab
+            active={filter === 'follow'}
+            onClick={() => setFilter('follow')}
+            count={typeCounts['follow'] || 0}
+            color="text-emerald-500"
+          >
+            <Users className="w-3.5 h-3.5" />
+            フレンド
+          </FilterTab>
+        </div>
       </div>
 
-      {/* Notifications List */}
-      {notifications && notifications.length > 0 ? (
-        <div className="space-y-2">
-          {notifications.map((notification) => {
-            const icon = notificationIcons[notification.type] || notificationIcons.system
-            const message = getNotificationMessage(notification)
-            const hasPendingRequest = notification.type === 'friend_request' && 
-              notification.from_user_id && 
-              pendingRequests.has(notification.from_user_id)
-            const isProcessing = processingRequest === notification.from_user_id
+      {/* Notification List */}
+      {filteredNotifications.length > 0 ? (
+        <div>
+          {groupedNotifications.map((group) => (
+            <div key={group.label}>
+              {/* Date group header */}
+              <div className="px-4 py-2 bg-muted/30 border-b border-border/30">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {group.label}
+                </span>
+              </div>
 
-            const href = notification.play_report?.id 
-              ? `/reports/${notification.play_report.id}`
-              : notification.from_user?.username
-              ? `/user/${notification.from_user.username}`
-              : '#'
-
-            return (
-              <Card 
-                key={notification.id} 
-                className={`bg-card/50 border-border/50 hover:border-primary/30 transition-colors ${!notification.is_read ? 'border-l-2 border-l-primary' : ''}`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    {notification.from_user?.avatar_url ? (
-                      <Avatar className="w-10 h-10 shrink-0 rounded-xl">
-                        <AvatarImage src={notification.from_user.avatar_url || "/placeholder.svg"} className="rounded-xl" />
-                        <AvatarFallback className="bg-primary/10 text-primary rounded-xl">
-                          {(notification.from_user.display_name || notification.from_user.username).charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    ) : (
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                        {icon}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <Link href={href} className="hover:underline">
-                        <p className="text-sm">{message}</p>
-                      </Link>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDate(notification.created_at)}
-                      </p>
-                      
-                      {/* Friend Request Actions */}
-                      {hasPendingRequest && (
-                        <div className="flex items-center gap-2 mt-3">
-                          <Button
-                            size="sm"
-                            onClick={() => handleAcceptRequest(notification.from_user_id!)}
-                            disabled={isProcessing}
-                            className="gap-1"
-                          >
-                            {isProcessing ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Check className="w-3 h-3" />
-                            )}
-                            承認
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRejectRequest(notification.from_user_id!)}
-                            disabled={isProcessing}
-                            className="gap-1 bg-transparent"
-                          >
-                            <X className="w-3 h-3" />
-                            拒否
-                          </Button>
-                        </div>
-                      )}
-                      
-                      {/* Already processed */}
-                      {notification.type === 'friend_request' && 
-                       notification.from_user_id && 
-                       !pendingRequests.has(notification.from_user_id) && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          この申請は処理済みです
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+              {/* Notifications in this group */}
+              {group.items.map((notification) => (
+                <NotificationRow
+                  key={notification.id}
+                  notification={notification}
+                  hasPendingRequest={
+                    notification.type === 'friend_request' &&
+                    !!notification.from_user_id &&
+                    pendingRequests.has(notification.from_user_id)
+                  }
+                  isProcessing={processingRequest === notification.from_user_id}
+                  onAccept={() => notification.from_user_id && handleAcceptRequest(notification.from_user_id)}
+                  onReject={() => notification.from_user_id && handleRejectRequest(notification.from_user_id)}
+                />
+              ))}
+            </div>
+          ))}
         </div>
       ) : (
-        <Card className="bg-card/50 border-border/50">
-          <CardContent className="py-12 text-center">
-            <Bell className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground">通知はありません</p>
-          </CardContent>
-        </Card>
+        <EmptyNotifications filter={filter} />
+      )}
+    </div>
+  )
+}
+
+// =============================================
+// Filter Tab Component
+// =============================================
+function FilterTab({
+  active,
+  onClick,
+  count,
+  color,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  count: number
+  color?: string
+  children: React.ReactNode
+}) {
+  if (count === 0 && !active) return null
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors relative',
+        active
+          ? 'text-foreground'
+          : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+        color && active ? color : '',
+      )}
+    >
+      {children}
+      {count > 0 && (
+        <span className={cn(
+          'text-[11px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1',
+          active ? 'bg-primary/10 text-primary font-bold' : 'bg-muted text-muted-foreground',
+        )}>
+          {count}
+        </span>
+      )}
+      {/* Active indicator bar */}
+      {active && (
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-[3px] rounded-full bg-primary" />
+      )}
+    </button>
+  )
+}
+
+// =============================================
+// Single Notification Row — Twitter-style
+// =============================================
+function NotificationRow({
+  notification,
+  hasPendingRequest,
+  isProcessing,
+  onAccept,
+  onReject,
+}: {
+  notification: NotificationItem
+  hasPendingRequest: boolean
+  isProcessing: boolean
+  onAccept: () => void
+  onReject: () => void
+}) {
+  const config = NOTIF_CONFIG[notification.type] || NOTIF_CONFIG.system
+  const name = notification.from_user?.display_name || notification.from_user?.username || '誰か'
+
+  // Build message parts for richer rendering
+  const scenarioName = notification.play_report?.scenario_name
+
+  const href = notification.play_report?.id
+    ? `/reports/${notification.play_report.id}`
+    : notification.from_user?.username
+      ? `/user/${notification.from_user.username}`
+      : '#'
+
+  return (
+    <div
+      className={cn(
+        'border-b border-border/50 transition-colors hover:bg-accent/30',
+        !notification.is_read && 'bg-primary/[0.02]',
+      )}
+    >
+      <div className="px-4 py-3.5">
+        <div className="flex gap-3">
+          {/* Left: Type icon */}
+          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5', config.accentColor)}>
+            {config.icon}
+          </div>
+
+          {/* Right: Content */}
+          <div className="flex-1 min-w-0">
+            {/* Avatar + message */}
+            <div className="flex items-start gap-2.5">
+              {/* User avatar(s) */}
+              {notification.from_user && (
+                <Link href={`/user/${notification.from_user.username}`} className="shrink-0">
+                  <Avatar className={cn('w-9 h-9 ring-2', config.accentRing)}>
+                    <AvatarImage src={notification.from_user.avatar_url || undefined} />
+                    <AvatarFallback className="text-xs">
+                      {(notification.from_user.display_name || notification.from_user.username)?.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Link>
+              )}
+
+              {/* Text content */}
+              <div className="flex-1 min-w-0">
+                <Link href={href} className="block group">
+                  <p className="text-[14px] leading-snug">
+                    <span className="font-bold group-hover:underline">{name}</span>
+                    <span className="text-muted-foreground">
+                      {notification.type === 'like' && 'が'}
+                      {notification.type === 'mention' && 'があなたを'}
+                      {notification.type === 'share_code' && 'が'}
+                      {notification.type === 'follow' && 'があなたとフレンドになりました'}
+                      {notification.type === 'friend_request' && 'からフレンド申請が届きました'}
+                      {notification.type === 'system' && ': お知らせ'}
+                    </span>
+                    {scenarioName && (notification.type === 'like' || notification.type === 'mention' || notification.type === 'share_code') && (
+                      <>
+                        <span className="font-semibold text-foreground">「{scenarioName}」</span>
+                        <span className="text-muted-foreground">
+                          {notification.type === 'like' && 'にいいねしました'}
+                          {notification.type === 'mention' && 'でメンションしました'}
+                          {notification.type === 'share_code' && 'を共有しました'}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </Link>
+
+                {/* Timestamp */}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formatRelativeTime(notification.created_at)}
+                </p>
+
+                {/* Friend Request Actions */}
+                {hasPendingRequest && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      size="sm"
+                      onClick={(e) => { e.preventDefault(); onAccept() }}
+                      disabled={isProcessing}
+                      className="gap-1.5 rounded-full px-5 h-8 text-xs"
+                    >
+                      {isProcessing ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                      承認する
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => { e.preventDefault(); onReject() }}
+                      disabled={isProcessing}
+                      className="gap-1.5 rounded-full px-5 h-8 text-xs bg-transparent"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      拒否
+                    </Button>
+                  </div>
+                )}
+
+                {/* Already processed friend request */}
+                {notification.type === 'friend_request' &&
+                  notification.from_user_id &&
+                  !hasPendingRequest && (
+                    <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      処理済み
+                    </p>
+                  )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Unread indicator dot */}
+      {!notification.is_read && (
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-primary" />
+      )}
+    </div>
+  )
+}
+
+// =============================================
+// Empty State
+// =============================================
+function EmptyNotifications({ filter }: { filter: FilterType }) {
+  const isFiltered = filter !== 'all'
+
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+      <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+        {isFiltered ? (
+          <Filter className="w-7 h-7 text-muted-foreground/40" />
+        ) : (
+          <BellOff className="w-7 h-7 text-muted-foreground/40" />
+        )}
+      </div>
+      <p className="font-medium text-muted-foreground">
+        {isFiltered ? 'この種類の通知はまだありません' : '通知はまだありません'}
+      </p>
+      <p className="text-sm text-muted-foreground/60 mt-1 max-w-[280px]">
+        {isFiltered
+          ? 'フィルターを変更してみてください'
+          : 'フレンドをフォローしたり記録を投稿すると、ここにアクティビティが表示されます'}
+      </p>
+      {!isFiltered && (
+        <div className="flex gap-2 mt-5">
+          <Link href="/search">
+            <Button variant="outline" size="sm" className="rounded-full gap-1.5 bg-transparent">
+              <Users className="w-3.5 h-3.5" />
+              ユーザーを探す
+            </Button>
+          </Link>
+        </div>
       )}
     </div>
   )

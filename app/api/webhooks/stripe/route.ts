@@ -90,6 +90,17 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
+  // Retrieve subscription to get current_period_end for tier_expires_at
+  let tierExpiresAt: string | null = null
+  if (session.subscription) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+      tierExpiresAt = new Date(subscription.current_period_end * 1000).toISOString()
+    } catch (err) {
+      console.error('Failed to retrieve subscription for expiry:', err)
+    }
+  }
+
   // Update user profile with subscription info
   const { error } = await getSupabaseAdmin()
     .from('profiles')
@@ -98,8 +109,10 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       stripe_customer_id: session.customer as string,
       stripe_subscription_id: session.subscription as string,
       tier_started_at: new Date().toISOString(),
+      tier_expires_at: tierExpiresAt,
       is_pro: tier === 'pro' || tier === 'streamer',
       is_streamer: tier === 'streamer',
+      former_tier: null, // Clear former_tier on new subscription
     })
     .eq('id', userId)
 
@@ -108,12 +121,43 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   }
 }
 
+async function determineTierFromSubscription(subscription: Stripe.Subscription): Promise<UserTier> {
+  // Priority 1: metadata.tier (set during checkout)
+  const metadataTier = subscription.metadata?.tier as UserTier
+  if (metadataTier && ['pro', 'streamer'].includes(metadataTier)) {
+    return metadataTier
+  }
+
+  // Priority 2: determine from price amount (JPY)
+  // Pro = ¥500/month or ¥5,000/year
+  // Streamer = ¥1,200/month or ¥12,000/year
+  const priceItem = subscription.items.data[0]?.price
+  if (priceItem?.unit_amount) {
+    const amount = priceItem.unit_amount
+    const interval = priceItem.recurring?.interval
+    if (interval === 'year') {
+      // Yearly: Streamer ¥12,000, Pro ¥5,000
+      if (amount >= 10000) return 'streamer'
+      if (amount >= 4000) return 'pro'
+    } else {
+      // Monthly: Streamer ¥1,200, Pro ¥500
+      if (amount >= 1000) return 'streamer'
+      if (amount >= 400) return 'pro'
+    }
+  }
+
+  return 'free'
+}
+
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const userId = subscription.metadata?.supabase_user_id
-  const tier = subscription.metadata?.tier as UserTier
+  const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString()
+  const status = subscription.status
+  const subscriptionTier = await determineTierFromSubscription(subscription)
 
-  if (!userId) {
-    // Try to find user by customer ID
+  // Find user: by metadata or by customer ID
+  let profileId = userId
+  if (!profileId) {
     const customerId = subscription.customer as string
     const { data: profile } = await getSupabaseAdmin()
       .from('profiles')
@@ -125,53 +169,22 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
       console.error('Could not find user for subscription update')
       return
     }
-
-    const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString()
-    const status = subscription.status
-
-    // Determine tier from subscription items if not in metadata
-    let subscriptionTier: UserTier = 'free'
-    if (tier) {
-      subscriptionTier = tier
-    } else if (subscription.items.data[0]?.price.unit_amount) {
-      const amount = subscription.items.data[0].price.unit_amount
-      if (amount >= 500) {
-        subscriptionTier = 'streamer'
-      } else if (amount >= 300) {
-        subscriptionTier = 'pro'
-      }
-    }
-
-    const { error } = await getSupabaseAdmin()
-      .from('profiles')
-      .update({
-        tier: status === 'active' ? subscriptionTier : 'free',
-        tier_expires_at: currentPeriodEnd,
-        stripe_subscription_id: subscription.id,
-        is_pro: status === 'active' && (subscriptionTier === 'pro' || subscriptionTier === 'streamer'),
-        is_streamer: status === 'active' && subscriptionTier === 'streamer',
-      })
-      .eq('id', profile.id)
-
-    if (error) {
-      console.error('Failed to update profile:', error)
-    }
-    return
+    profileId = profile.id
   }
 
-  const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString()
-  const status = subscription.status
+  const isActive = status === 'active'
+  const effectiveTier = isActive ? subscriptionTier : 'free'
 
   const { error } = await getSupabaseAdmin()
     .from('profiles')
     .update({
-      tier: status === 'active' ? (tier || 'pro') : 'free',
+      tier: effectiveTier,
       tier_expires_at: currentPeriodEnd,
       stripe_subscription_id: subscription.id,
-      is_pro: status === 'active' && (tier === 'pro' || tier === 'streamer'),
-      is_streamer: status === 'active' && tier === 'streamer',
+      is_pro: isActive && (subscriptionTier === 'pro' || subscriptionTier === 'streamer'),
+      is_streamer: isActive && subscriptionTier === 'streamer',
     })
-    .eq('id', userId)
+    .eq('id', profileId)
 
   if (error) {
     console.error('Failed to update profile:', error)
@@ -183,7 +196,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 
   const { data: profile } = await getSupabaseAdmin()
     .from('profiles')
-    .select('id')
+    .select('id, tier')
     .eq('stripe_customer_id', customerId)
     .single()
 
@@ -192,7 +205,10 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     return
   }
 
-  // Downgrade to free tier
+  // Save current tier as former_tier for grey badge display
+  const formerTier = profile.tier !== 'free' ? profile.tier : null
+
+  // Downgrade to free tier — data is preserved, only new additions are restricted
   const { error } = await getSupabaseAdmin()
     .from('profiles')
     .update({
@@ -201,6 +217,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
       is_streamer: false,
       stripe_subscription_id: null,
       tier_expires_at: null,
+      former_tier: formerTier,
     })
     .eq('id', profile.id)
 

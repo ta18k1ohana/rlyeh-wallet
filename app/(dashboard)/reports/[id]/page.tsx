@@ -19,7 +19,11 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { ShareCodeButton } from '@/components/share-code-button'
-import { ImageCarousel } from '@/components/image-carousel' // Import ImageCarousel component
+import { ImageCarousel } from '@/components/image-carousel'
+import { YouTubeEmbed } from '@/components/youtube-embed'
+import { SmartContentRenderer } from '@/components/markdown-renderer'
+import { canUseFeature, getProfileLimits } from '@/lib/tier-limits'
+import type { YouTubeLink, Profile as ProfileType } from '@/lib/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -55,9 +59,24 @@ export default async function ReportDetailPage({ params }: PageProps) {
     notFound()
   }
 
+  // Fetch YouTube links for this report
+  const { data: youtubeLinks } = await supabase
+    .from('youtube_links')
+    .select('*')
+    .eq('play_report_id', id)
+    .order('sort_order', { ascending: true })
+
+  // Get report owner's profile for tier-based rendering
+  const { data: ownerProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', report.user_id)
+    .single()
+
   const isOwner = user?.id === report.user_id
   const kpParticipants = report.participants?.filter((p: { role: string }) => p.role === 'KP') || []
   const plParticipants = report.participants?.filter((p: { role: string }) => p.role === 'PL') || []
+  const isMarkdownEnabled = canUseFeature(ownerProfile as ProfileType | null, 'canUseMarkdownMemo')
 
   const resultLabels: Record<string, string> = {
     success: '成功',
@@ -356,6 +375,15 @@ export default async function ReportDetailPage({ params }: PageProps) {
         </Card>
       )}
 
+      {/* YouTube Embed - Streamer feature */}
+      {youtubeLinks && youtubeLinks.length > 0 && (
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="pt-6">
+            <YouTubeEmbed youtubeLinks={youtubeLinks as YouTubeLink[]} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Impression */}
       {report.impression && (
         <Card className="bg-card/50 border-border/50">
@@ -363,7 +391,27 @@ export default async function ReportDetailPage({ params }: PageProps) {
             <CardTitle>感想・メモ</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="whitespace-pre-wrap">{report.impression}</p>
+            <SmartContentRenderer
+              content={report.impression}
+              isMarkdownEnabled={isMarkdownEnabled}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Private Notes - Only visible to owner, Pro feature */}
+      {isOwner && report.private_notes && (
+        <Card className="bg-card/50 border-dashed border-border/50">
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              🔒 プライベートノート
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SmartContentRenderer
+              content={report.private_notes}
+              isMarkdownEnabled={isMarkdownEnabled}
+            />
           </CardContent>
         </Card>
       )}

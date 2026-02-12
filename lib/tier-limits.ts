@@ -1,6 +1,7 @@
 import type { UserTier, Profile } from './types'
 
 // Tier limits configuration
+// Infinity = unlimited for that tier
 export const TIER_LIMITS = {
   free: {
     maxImages: 5,
@@ -26,14 +27,20 @@ export const TIER_LIMITS = {
     canUseMatching: false,
     canHideAds: false,
     maxScenarioPreferences: 0,
+    // Pro Plan: Advanced features
+    canUseMarkdownMemo: false,
+    canUsePrivateNotes: false,
+    // Streamer Plan: Features
+    canUseYouTubeEmbed: false,
+    canDistributeAds: false,
   },
   pro: {
-    maxImages: 20,
+    maxImages: Infinity, // Pro: unlimited images
     maxImageSize: 2400, // px
-    maxLinks: 20,
-    maxImpressionLength: 5000,
-    maxFollowing: 500,
-    maxFriends: 200,
+    maxLinks: Infinity, // Pro: unlimited links
+    maxImpressionLength: Infinity, // Pro: unlimited text
+    maxFollowing: Infinity, // Pro: unlimited following
+    maxFriends: Infinity, // Pro: unlimited friends
     maxTagsPerReport: 5, // Pro+: 5 tags per report
     canExportData: true,
     canUseCustomTags: true,
@@ -51,14 +58,20 @@ export const TIER_LIMITS = {
     canUseMatching: true,
     canHideAds: true,
     maxScenarioPreferences: 10,
+    // Pro Plan: Advanced features
+    canUseMarkdownMemo: true,
+    canUsePrivateNotes: true,
+    // Streamer Plan: Features
+    canUseYouTubeEmbed: false,
+    canDistributeAds: false,
   },
   streamer: {
-    maxImages: 50,
-    maxImageSize: 4800, // px
-    maxLinks: 50,
-    maxImpressionLength: 10000,
-    maxFollowing: 1000,
-    maxFriends: 500,
+    maxImages: Infinity, // Streamer: unlimited images
+    maxImageSize: Infinity, // Streamer: original size
+    maxLinks: Infinity, // Streamer: unlimited links
+    maxImpressionLength: Infinity, // Streamer: unlimited text
+    maxFollowing: Infinity, // Streamer: unlimited following
+    maxFriends: Infinity, // Streamer: unlimited friends
     maxTagsPerReport: 5, // Streamer: 5 tags per report
     canExportData: true,
     canUseCustomTags: true,
@@ -76,7 +89,11 @@ export const TIER_LIMITS = {
     canUseMatching: true,
     canHideAds: true,
     maxScenarioPreferences: 10,
-    // Streamer Plan: Ad distribution
+    // Pro Plan: Advanced features (inherited)
+    canUseMarkdownMemo: true,
+    canUsePrivateNotes: true,
+    // Streamer Plan: Features
+    canUseYouTubeEmbed: true,
     canDistributeAds: true,
   },
 } as const
@@ -148,7 +165,7 @@ export const TIER_DISPLAY_NAMES: Record<UserTier, string> = {
 export const TIER_PRICING: Record<UserTier, number> = {
   free: 0,
   pro: 500,
-  streamer: 1500,
+  streamer: 1200,
 }
 
 // Check if tier is active (not expired)
@@ -191,4 +208,24 @@ export const TIER_BADGE_COLORS: Record<UserTier, { bg: string; text: string; bor
     text: 'text-purple-600',
     border: 'border-purple-500/30',
   },
+}
+
+// Former tier grey badge colors (for downgraded users)
+export const FORMER_TIER_BADGE_COLORS: Record<'pro' | 'streamer', { bg: string; text: string; border: string }> = {
+  pro: {
+    bg: 'bg-muted',
+    text: 'text-muted-foreground',
+    border: 'border-border',
+  },
+  streamer: {
+    bg: 'bg-muted',
+    text: 'text-muted-foreground',
+    border: 'border-border',
+  },
+}
+
+// Former tier display names
+export const FORMER_TIER_DISPLAY_NAMES: Record<'pro' | 'streamer', string> = {
+  pro: '元Pro',
+  streamer: '元配信者',
 }

@@ -32,7 +32,7 @@ import {
   type VirtualFolder,
   calculateFolderStats
 } from '@/components/folder-card'
-import { FolderManager, ProFeatureIndicator } from '@/components/folder-manager'
+import { CreateFolderButton, ProFeatureIndicator } from '@/components/folder-manager'
 import type { PlayReport, ReportFolder, Profile } from '@/lib/types'
 import { getProfileLimits } from '@/lib/tier-limits'
 
@@ -297,10 +297,9 @@ export default function WalletPage() {
         </div>
         <div className="flex items-center gap-2">
           {canUseFolders && profile && (
-            <FolderManager
+            <CreateFolderButton
               userId={profile.id}
-              onFoldersChange={() => {
-                // Reload folders
+              onFolderCreated={() => {
                 const loadFolders = async () => {
                   const supabase = createClient()
                   const { data } = await supabase
@@ -425,15 +424,15 @@ export default function WalletPage() {
         </div>
       )}
 
-      {/* Reports/Folders Grid */}
+      {/* Content Area */}
       {openFolder ? (
-        // Inside folder - show reports
+        // Inside folder — show reports only
         filteredReports.length > 0 ? (
           viewMode === 'grid' ? (
             <SessionCardGrid columns={4}>
               {filteredReports.map(report => (
-                <SessionCard 
-                  key={report.id} 
+                <SessionCard
+                  key={report.id}
                   report={report}
                   showEdit
                 />
@@ -442,8 +441,8 @@ export default function WalletPage() {
           ) : (
             <div className="space-y-3">
               {filteredReports.map(report => (
-                <SessionCard 
-                  key={report.id} 
+                <SessionCard
+                  key={report.id}
                   report={report}
                   compact
                   showEdit
@@ -455,20 +454,12 @@ export default function WalletPage() {
           <EmptyState hasFilters={!!searchQuery || filterYear !== 'all' || filterResult !== 'all'} />
         )
       ) : (
-        // Main view - show folders and ungrouped reports
+        // Main view — folders and reports mixed naturally in same grid
         filteredGroupedItems.length > 0 ? (
           viewMode === 'grid' ? (
             <SessionCardGrid columns={4}>
               {filteredGroupedItems.map((item, index) => {
-                if (isPlayReport(item)) {
-                  return (
-                    <SessionCard 
-                      key={item.id} 
-                      report={item}
-                      showEdit
-                    />
-                  )
-                } else if (isVirtualFolder(item)) {
+                if (isVirtualFolder(item)) {
                   return (
                     <FolderCard
                       key={`vf-${item.name}-${index}`}
@@ -487,14 +478,22 @@ export default function WalletPage() {
                       onClick={() => setOpenFolder(item)}
                     />
                   )
+                } else if (isPlayReport(item)) {
+                  return (
+                    <SessionCard
+                      key={item.id}
+                      report={item}
+                      showEdit
+                    />
+                  )
                 } else {
-                  // Real folder
-                  const folderWithReports = item as ReportFolder
+                  // Real folder (ReportFolder)
+                  const folder = item as ReportFolder
                   return (
                     <FolderCard
-                      key={folderWithReports.id}
-                      folder={folderWithReports}
-                      onClick={() => setOpenFolder(folderWithReports)}
+                      key={folder.id}
+                      folder={folder}
+                      onClick={() => setOpenFolder(folder)}
                     />
                   )
                 }
@@ -503,16 +502,7 @@ export default function WalletPage() {
           ) : (
             <div className="space-y-3">
               {filteredGroupedItems.map((item, index) => {
-                if (isPlayReport(item)) {
-                  return (
-                    <SessionCard 
-                      key={item.id} 
-                      report={item}
-                      compact
-                      showEdit
-                    />
-                  )
-                } else if (isVirtualFolder(item)) {
+                if (isVirtualFolder(item)) {
                   return (
                     <FolderCard
                       key={`vf-${item.name}-${index}`}
@@ -531,13 +521,22 @@ export default function WalletPage() {
                       onClick={() => setOpenFolder(item)}
                     />
                   )
+                } else if (isPlayReport(item)) {
+                  return (
+                    <SessionCard
+                      key={item.id}
+                      report={item}
+                      compact
+                      showEdit
+                    />
+                  )
                 } else {
-                  const folderWithReports = item as ReportFolder
+                  const folder = item as ReportFolder
                   return (
                     <FolderCard
-                      key={folderWithReports.id}
-                      folder={folderWithReports}
-                      onClick={() => setOpenFolder(folderWithReports)}
+                      key={folder.id}
+                      folder={folder}
+                      onClick={() => setOpenFolder(folder)}
                     />
                   )
                 }

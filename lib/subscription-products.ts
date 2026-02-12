@@ -25,8 +25,8 @@ export const SUBSCRIPTION_PRODUCTS: SubscriptionProduct[] = [
       '画像アップロード（5枚/1200px）',
       '関連リンク（5個）',
       '感想メモ（500文字）',
-      'フォロー（100人）',
-      'フレンドのセッション閲覧',
+      'フォロー（100人）/ フレンド（50人）',
+      'タグ（1個/レポート）',
     ],
   },
   {
@@ -39,11 +39,12 @@ export const SUBSCRIPTION_PRODUCTS: SubscriptionProduct[] = [
     highlighted: true,
     features: [
       '無料プランの全機能',
-      '画像アップロード（20枚/2400px）',
-      '関連リンク（20個）',
-      '感想メモ（無制限）',
-      'フォロー（500人）',
-      'カスタムタグ・フォルダ',
+      '画像アップロード（無制限/2400px）',
+      '関連リンク（無制限）',
+      '感想メモ（無制限・Markdown対応）',
+      'フォロー・フレンド（無制限）',
+      'カスタムタグ（5個）・フォルダ',
+      'プライベートノート',
       'データエクスポート',
       'Proバッジ表示',
       '広告非表示',
@@ -58,7 +59,7 @@ export const SUBSCRIPTION_PRODUCTS: SubscriptionProduct[] = [
     priceYearlyYen: 12000, // 2ヶ月分お得
     features: [
       'Proプランの全機能',
-      '画像アップロード（50枚/原寸）',
+      '画像アップロード（無制限/原寸）',
       '関連リンク（無制限）',
       'YouTube動画埋め込み',
       'カスタムプロフィールURL',

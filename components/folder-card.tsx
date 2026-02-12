@@ -64,9 +64,9 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
       }
 
   return (
-    <div className="group">
-      <button 
-        type="button" 
+    <div className="group break-inside-avoid mb-5">
+      <button
+        type="button"
         onClick={onClick}
         className="block w-full text-left"
       >

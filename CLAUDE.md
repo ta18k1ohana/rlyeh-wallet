@@ -104,9 +104,9 @@ Schema files: `scripts/001_create_schema.sql`, `scripts/002_create_folders.sql`,
 
 | Tier | Price | Key Features |
 |------|-------|--------------|
-| Free | ¥0 | 5 images, 1 tag, 50 friends |
-| Pro | ¥500/mo | 20 images, 5 tags, folders, export |
-| Streamer | ¥1,500/mo | 50 images, custom URL/theme, viewer comments |
+| Free | ¥0 | 5 images, 1 tag, 50 friends, 500 chars memo |
+| Pro | ¥500/mo | Unlimited images/links/text, Markdown memo, private notes, folders, export |
+| Streamer | ¥1,200/mo | All Pro features + YouTube embed, custom theme, custom URL, viewer comments |
 
 Limits defined in: `lib/tier-limits.ts`
 
@@ -167,3 +167,52 @@ npx shadcn@latest add [component-name]
 
 ### Adding Stripe products
 Update `lib/subscription-products.ts` with new price IDs
+
+## Subscription_Task
+
+サブスクリプションシステムの仕様とコードのギャップを修正するタスクリスト。
+
+### Phase 1: 基盤修正
+| ID | タスク | ステータス |
+|----|--------|-----------|
+| S-1 | DB migration `007_add_subscription_columns.sql` — profiles テーブルに `tier`, `tier_started_at`, `tier_expires_at`, `stripe_customer_id`, `stripe_subscription_id`, `is_streamer`, `former_tier` カラムを追加 | ✅ |
+| S-2 | Webhook修正 — checkout.session.completed で `tier_expires_at` を設定、handleSubscriptionUpdate の金額ハードコード削除、metadata の `tier` を正規ソースとして使用 | ✅ |
+| S-3 | `is_pro`/`is_streamer` → `tier` enum 一本化 — コード全体で `profile.tier` を正規参照に統一 | ✅ |
+
+### Phase 2: 制限値を仕様に合わせる
+| ID | タスク | ステータス |
+|----|--------|-----------|
+| S-4 | `tier-limits.ts` を仕様値に更新 — Pro: 画像無制限/リンク無制限/テキスト無制限、Streamer価格 ¥1,200 | ✅ |
+| S-5 | フォロー制限 — Pro/Streamer = 無制限に変更 | ✅ |
+
+### Phase 3: ダウングレード挙動
+| ID | タスク | ステータス |
+|----|--------|-----------|
+| S-6 | ダウングレード時データ保持ロジック — 既存データは残す、新規追加のみ制限 | ✅ |
+| S-7 | 旧ティアグレーバッジ — `former_tier` カラムとグレー表示バッジ | ✅ |
+| S-8 | ダウングレードガイダンスUI — 制限超過時の案内表示 | ✅ |
+
+### Phase 4: 未実装の配信者機能
+| ID | タスク | ステータス |
+|----|--------|-----------|
+| S-9 | YouTube動画埋め込み | ✅ |
+| S-10 | カスタムカラーテーマ | ✅ |
+| S-11 | メンション承認UI | ✅ |
+
+### Phase 5: 未実装のPro機能
+| ID | タスク | ステータス |
+|----|--------|-----------|
+| S-12 | Markdown対応詳細メモ | ✅ |
+| S-13 | プライベートノート | ✅ |
+
+### Phase 6: セキュリティ強化
+| ID | タスク | ステータス |
+|----|--------|-----------|
+| S-14 | サーバーサイド制限 (RLS/DBトリガー) | ✅ |
+
+### Deferred (将来対応)
+- NFT連携
+- ロゴアップロード
+- AI アシスト
+- リマインダー
+- プラン比較機能

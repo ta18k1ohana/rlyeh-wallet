@@ -368,6 +368,113 @@ export function AssignToFolderDialog({ report, folders, onAssigned, trigger }: A
   )
 }
 
+// Simple "Create folder" button with dialog (no list, no empty state)
+// Used in wallet header alongside "新規記録"
+interface CreateFolderButtonProps {
+  userId: string
+  onFolderCreated?: () => void
+}
+
+export function CreateFolderButton({ userId, onFolderCreated }: CreateFolderButtonProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [editingFolder, setEditingFolder] = useState<ReportFolder | null>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [newFolderDescription, setNewFolderDescription] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSaveFolder() {
+    if (!newFolderName.trim()) {
+      toast.error('フォルダ名を入力してください')
+      return
+    }
+
+    setSaving(true)
+    const supabase = createClient()
+
+    const { error } = await supabase
+      .from('report_folders')
+      .insert({
+        user_id: userId,
+        name: newFolderName.trim(),
+        description: newFolderDescription.trim() || null,
+        sort_order: 0,
+      })
+
+    if (error) {
+      if (error.code === '23505') {
+        toast.error('同じ名前のフォルダが既に存在します')
+      } else {
+        toast.error('フォルダの作成に失敗しました')
+      }
+    } else {
+      toast.success('フォルダを作成しました')
+      onFolderCreated?.()
+    }
+
+    setSaving(false)
+    setIsOpen(false)
+    setNewFolderName('')
+    setNewFolderDescription('')
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          className="gap-2 bg-transparent"
+          onClick={() => {
+            setNewFolderName('')
+            setNewFolderDescription('')
+            setIsOpen(true)
+          }}
+        >
+          <FolderPlus className="w-4 h-4" />
+          新規フォルダ
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>新規フォルダ</DialogTitle>
+          <DialogDescription>
+            フォルダを作成してセッション記録をコレクションできます
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>フォルダ名</Label>
+            <Input
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="例: クトゥルフ2020、長編シナリオ"
+              maxLength={50}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>説明（任意）</Label>
+            <Textarea
+              value={newFolderDescription}
+              onChange={(e) => setNewFolderDescription(e.target.value)}
+              placeholder="フォルダの説明..."
+              rows={2}
+              maxLength={200}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setIsOpen(false)} className="bg-transparent">
+            キャンセル
+          </Button>
+          <Button onClick={handleSaveFolder} disabled={saving}>
+            {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            作成
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // Pro feature indicator
 export function ProFeatureIndicator() {
   return (
