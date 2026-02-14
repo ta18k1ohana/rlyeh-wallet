@@ -151,9 +151,9 @@ export default function SettingsPage() {
       // Load user's reports for favorite scenario picker
       const { data: reportsData } = await supabase
         .from('play_reports')
-        .select('id, scenario_name, cover_image_url')
+        .select('id, scenario_name, scenario_author, cover_image_url')
         .eq('user_id', user.id)
-        .order('played_at', { ascending: false })
+        .order('play_date_start', { ascending: false })
 
       if (reportsData) {
         setUserReports(reportsData as PlayReport[])

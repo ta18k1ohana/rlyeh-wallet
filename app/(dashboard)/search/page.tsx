@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Hash, User, BookOpen, Loader2, LayoutGrid, List, UserPlus, UserCheck, Clock, Star, Tag } from 'lucide-react'
+import { Search, User, BookOpen, Loader2, LayoutGrid, List, UserPlus, UserCheck, Clock, Star, Tag } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { SessionCard, SessionCardGrid } from '@/components/session-card'
 import { toast } from 'sonner'
@@ -16,7 +16,7 @@ import { getProfileLimits } from '@/lib/tier-limits'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { RecentReports } from '@/components/recent-reports'
+
 
 export default function SearchPage() {
   return (
@@ -42,26 +42,23 @@ function SearchPageSkeleton() {
 function SearchPageContent() {
   const searchParams = useSearchParams()
   const initialTab = searchParams.get('tab') === 'streamers' ? 'streamers' : 'search'
-  
+
   const [query, setQuery] = useState('')
-  const [shareCode, setShareCode] = useState('')
   const [isPending, startTransition] = useTransition()
   const [searchResults, setSearchResults] = useState<{
     reports: PlayReport[]
     users: Profile[]
   }>({ reports: [], users: [] })
   const [hasSearched, setHasSearched] = useState(false)
-  const [codeResult, setCodeResult] = useState<PlayReport | null>(null)
-  const [codeSearched, setCodeSearched] = useState(false)
   const [streamers, setStreamers] = useState<Profile[]>([])
   const [loadingStreamers, setLoadingStreamers] = useState(false)
-  
+
   // Tag search state
   const [tagQuery, setTagQuery] = useState('')
   const [tagSearchResults, setTagSearchResults] = useState<PlayReport[]>([])
   const [hasTagSearched, setHasTagSearched] = useState(false)
   const [popularTags, setPopularTags] = useState<{ tag_name: string; count: number }[]>([])
-  
+
   // Filter state
   const [edition, setEdition] = useState<string>('all')
   const [result, setResult] = useState<string>('all')
@@ -72,26 +69,26 @@ function SearchPageContent() {
   // Load popular tags
   async function loadPopularTags() {
     const supabase = createClient()
-    
+
     // Get most used tags (simple count approach)
     const { data } = await supabase
       .from('report_tags')
       .select('tag_name')
       .limit(100)
-    
+
     if (data) {
       // Count occurrences
       const tagCounts: Record<string, number> = {}
       for (const tag of data) {
         tagCounts[tag.tag_name] = (tagCounts[tag.tag_name] || 0) + 1
       }
-      
+
       // Sort by count and take top 10
       const sortedTags = Object.entries(tagCounts)
         .map(([tag_name, count]) => ({ tag_name, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 10)
-      
+
       setPopularTags(sortedTags)
     }
   }
@@ -103,16 +100,16 @@ function SearchPageContent() {
 
     startTransition(async () => {
       const supabase = createClient()
-      
+
       // Search reports by tag name
       const { data: tagMatches } = await supabase
         .from('report_tags')
         .select('play_report_id')
         .ilike('tag_name', `%${tagQuery}%`)
-      
+
       if (tagMatches && tagMatches.length > 0) {
         const reportIds = tagMatches.map(t => t.play_report_id)
-        
+
         const { data: reports } = await supabase
           .from('play_reports')
           .select(`
@@ -160,7 +157,7 @@ function SearchPageContent() {
           .in('id', reportIds)
           .order('play_date_start', { ascending: false })
           .limit(30)
-        
+
         setTagSearchResults(reports || [])
       } else {
         setTagSearchResults([])
@@ -173,14 +170,14 @@ function SearchPageContent() {
   async function loadStreamers() {
     setLoadingStreamers(true)
     const supabase = createClient()
-    
+
     const { data } = await supabase
       .from('profiles')
       .select('*')
       .eq('tier', 'streamer')
       .order('display_name', { ascending: true })
       .limit(50)
-    
+
     setStreamers(data || [])
     setLoadingStreamers(false)
   }
@@ -191,7 +188,7 @@ function SearchPageContent() {
 
     startTransition(async () => {
       const supabase = createClient()
-      
+
       // Build query for reports
       let reportsQuery = supabase
         .from('play_reports')
@@ -238,32 +235,7 @@ function SearchPageContent() {
     })
   }
 
-  function handleShareCodeSearch(e: React.FormEvent) {
-    e.preventDefault()
-    if (!shareCode.trim()) return
 
-    startTransition(async () => {
-      const supabase = createClient()
-      
-      const { data: report, error } = await supabase
-        .from('play_reports')
-        .select(`
-          *,
-          profile:profiles(username, display_name, avatar_url),
-          participants:play_report_participants(*)
-        `)
-        .eq('share_code', shareCode.toUpperCase().trim())
-        .single()
-
-      if (error || !report) {
-        toast.error('共有コードが見つかりませんでした')
-        setCodeResult(null)
-      } else {
-        setCodeResult(report)
-      }
-      setCodeSearched(true)
-    })
-  }
 
   return (
     <div className="space-y-6">
@@ -289,10 +261,6 @@ function SearchPageContent() {
           <TabsTrigger value="tag-search" className="gap-2">
             <Tag className="w-4 h-4" />
             タグ
-          </TabsTrigger>
-          <TabsTrigger value="share-code" className="gap-2">
-            <Hash className="w-4 h-4" />
-            共有コード
           </TabsTrigger>
           <TabsTrigger value="streamers" className="gap-2">
             <Star className="w-4 h-4" />
@@ -539,62 +507,7 @@ function SearchPageContent() {
           )}
         </TabsContent>
 
-        <TabsContent value="share-code" className="space-y-6">
-          {/* Share Code Form */}
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Hash className="w-5 h-5 text-primary" />
-                共有コードで検索
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleShareCodeSearch} className="space-y-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    参加したセッションの共有コードを入力して、記録を検索できます
-                  </p>
-                  <div className="flex gap-2">
-                    <Input
-                      value={shareCode}
-                      onChange={(e) => setShareCode(e.target.value.toUpperCase())}
-                      placeholder="例: ABCD1234"
-                      className="font-mono tracking-widest uppercase"
-                      maxLength={8}
-                      disabled={isPending}
-                    />
-                    <Button type="submit" disabled={isPending || shareCode.length < 8}>
-                      {isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        '検索'
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
 
-          {/* Code Search Result */}
-          {codeSearched && codeResult && (
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold">検索結果</h2>
-              <RecentReports reports={[codeResult]} />
-            </div>
-          )}
-
-          {codeSearched && !codeResult && (
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="py-12 text-center">
-                <p className="text-muted-foreground">共有コードが見つかりませんでした</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  コードを確認して、もう一度お試しください
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
         <TabsContent value="streamers" className="space-y-6">
           <div className="flex items-center justify-between">
@@ -644,7 +557,7 @@ function UserCard({ user }: { user: Profile }) {
     async function checkFriendStatus() {
       const supabase = createClient()
       const { data: { user: currentUser } } = await supabase.auth.getUser()
-      
+
       if (!currentUser || currentUser.id === user.id) {
         setFriendStatus('none')
         return
@@ -699,31 +612,31 @@ function UserCard({ user }: { user: Profile }) {
   async function sendFriendRequest(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    
+
     if (!currentUserId) return
-    
+
     const supabase = createClient()
-    
+
     // Get current user profile for tier limits
     const { data: currentProfile } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', currentUserId)
       .single()
-    
+
     const limits = getProfileLimits(currentProfile)
-    
+
     // Check follow count against limit
     const { count: followCount } = await supabase
       .from('follows')
       .select('*', { count: 'exact', head: true })
       .eq('follower_id', currentUserId)
-    
+
     if ((followCount || 0) >= limits.maxFollows) {
       toast.error(`フォロー上限（${limits.maxFollows}人）に達しています。Proプランにアップグレードすると上限が500人になります。`)
       return
     }
-    
+
     // Check for existing request (any status)
     const { data: existingRequest } = await supabase
       .from('friend_requests')
@@ -737,11 +650,11 @@ function UserCard({ user }: { user: Profile }) {
         setFriendStatus('pending')
         return
       }
-      
+
       // If rejected, update the existing request to pending
       const { error: updateError } = await supabase
         .from('friend_requests')
-        .update({ 
+        .update({
           status: 'pending',
           from_user_id: currentUserId,
           to_user_id: user.id,
@@ -807,7 +720,7 @@ function UserCard({ user }: { user: Profile }) {
                 <p className="text-sm text-muted-foreground">@{user.username}</p>
               </div>
             </div>
-            
+
             {currentUserId && currentUserId !== user.id && (
               <div onClick={(e) => e.preventDefault()}>
                 {friendStatus === 'loading' ? (
@@ -825,9 +738,9 @@ function UserCard({ user }: { user: Profile }) {
                     申請中
                   </Button>
                 ) : (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={sendFriendRequest}
                     className="gap-2 bg-transparent"
                   >
@@ -853,7 +766,7 @@ function StreamerCard({ user }: { user: Profile }) {
     async function checkFollowStatus() {
       const supabase = createClient()
       const { data: { user: currentUser } } = await supabase.auth.getUser()
-      
+
       if (!currentUser || currentUser.id === user.id) {
         setLoading(false)
         return
@@ -878,12 +791,12 @@ function StreamerCard({ user }: { user: Profile }) {
   async function toggleFollow(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    
+
     if (!currentUserId) return
-    
+
     setLoading(true)
     const supabase = createClient()
-    
+
     if (isFollowing) {
       // Unfollow
       await supabase
@@ -891,7 +804,7 @@ function StreamerCard({ user }: { user: Profile }) {
         .delete()
         .eq('follower_id', currentUserId)
         .eq('following_id', user.id)
-      
+
       setIsFollowing(false)
       toast.success('フォローを解除しました')
     } else {
@@ -901,20 +814,20 @@ function StreamerCard({ user }: { user: Profile }) {
         .select('*')
         .eq('id', currentUserId)
         .single()
-      
+
       const limits = getProfileLimits(currentProfile)
-      
+
       const { count: followCount } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
         .eq('follower_id', currentUserId)
-      
+
       if ((followCount || 0) >= limits.maxFollows) {
         toast.error(`フォロー上限（${limits.maxFollows}人）に達しています。Proプランにアップグレードすると上限が500人になります。`)
         setLoading(false)
         return
       }
-      
+
       // Follow
       const { error } = await supabase
         .from('follows')
@@ -930,7 +843,7 @@ function StreamerCard({ user }: { user: Profile }) {
         toast.success('フォローしました')
       }
     }
-    
+
     setLoading(false)
   }
 
@@ -959,7 +872,7 @@ function StreamerCard({ user }: { user: Profile }) {
                 )}
               </div>
             </div>
-            
+
             {currentUserId && currentUserId !== user.id && (
               <div onClick={(e) => e.preventDefault()}>
                 {loading ? (
@@ -967,9 +880,9 @@ function StreamerCard({ user }: { user: Profile }) {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   </Button>
                 ) : isFollowing ? (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={toggleFollow}
                     className="gap-2 text-purple-600 bg-transparent hover:text-purple-700"
                   >
@@ -977,9 +890,9 @@ function StreamerCard({ user }: { user: Profile }) {
                     フォロー中
                   </Button>
                 ) : (
-                  <Button 
+                  <Button
                     variant="default"
-                    size="sm" 
+                    size="sm"
                     onClick={toggleFollow}
                     className="gap-2 bg-purple-600 hover:bg-purple-700"
                   >

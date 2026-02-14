@@ -16,12 +16,13 @@ import { UserAutocomplete } from '@/components/user-autocomplete'
 import { ReportTagInput } from '@/components/report-tag-input'
 import { YouTubeLinksEditor } from '@/components/youtube-embed'
 import { UpgradeBanner, UpgradeInlineWarning } from '@/components/upgrade-banner'
+import { ScenarioAuthorSuggest } from '@/components/scenario-author-suggest'
 import { getProfileLimits, canUseFeature } from '@/lib/tier-limits'
 import type { Profile, ReportTag } from '@/lib/types'
-import { 
-  ArrowLeft, 
-  Loader2, 
-  Plus, 
+import {
+  ArrowLeft,
+  Loader2,
+  Plus,
   Trash2,
   User,
   AlertTriangle
@@ -58,7 +59,7 @@ export default function EditReportPage() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [report, setReport] = useState<PlayReport | null>(null)
-  
+
   // Form state
   const [scenarioName, setScenarioName] = useState('')
   const [scenarioAuthor, setScenarioAuthor] = useState('')
@@ -88,19 +89,19 @@ export default function EditReportPage() {
 
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (!user) {
         router.push('/login')
         return
       }
 
-// Get user profile for tier limits
+      // Get user profile for tier limits
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single()
-      
+
       if (profileData) {
         setProfile(profileData)
       }
@@ -134,7 +135,7 @@ export default function EditReportPage() {
       setScenarioAuthor(reportData.scenario_author || '')
       setEdition(reportData.edition || '')
       setCoverImageUrl(reportData.cover_image_url)
-      
+
       // Load additional images
       if (reportData.images && reportData.images.length > 0) {
         const sortedImages = [...reportData.images]
@@ -142,7 +143,7 @@ export default function EditReportPage() {
           .map((img: { image_url: string }) => img.image_url)
         setAdditionalImages(sortedImages)
       }
-      
+
       // Format dates for input[type="date"] (YYYY-MM-DD)
       setPlayDateStart(reportData.play_date_start ? reportData.play_date_start.split('T')[0] : '')
       setPlayDateEnd(reportData.play_date_end ? reportData.play_date_end.split('T')[0] : '')
@@ -152,7 +153,7 @@ export default function EditReportPage() {
       setImpression(reportData.impression || '')
       setPrivateNotes(reportData.private_notes || '')
       setPrivacySetting(reportData.privacy_setting)
-      
+
       // Load links
       if (reportData.links && reportData.links.length > 0) {
         setLinks(reportData.links.map((l: ReportLink & { id: string }) => ({
@@ -162,18 +163,18 @@ export default function EditReportPage() {
           title: l.title || '',
         })))
       }
-      
-if (reportData.participants && reportData.participants.length > 0) {
-		setParticipants(reportData.participants.map((p: PlayReportParticipant) => ({
-		id: p.id,
-		username: p.username,
-		user_id: p.user_id || null,
-		role: p.role,
-		character_name: p.character_name || '',
-		handout: p.handout || '',
-		result: p.result || ''
-		})))
-		}
+
+      if (reportData.participants && reportData.participants.length > 0) {
+        setParticipants(reportData.participants.map((p: PlayReportParticipant) => ({
+          id: p.id,
+          username: p.username,
+          user_id: p.user_id || null,
+          role: p.role,
+          character_name: p.character_name || '',
+          handout: p.handout || '',
+          result: p.result || ''
+        })))
+      }
 
       // Load tags
       if (reportData.tags && reportData.tags.length > 0) {
@@ -259,9 +260,9 @@ if (reportData.participants && reportData.participants.length > 0) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    
+
     if (saving) return // Prevent double submission
-    
+
     if (!scenarioName || !playDateStart) {
       toast.error('シナリオ名と開始日は必須です')
       return
@@ -273,6 +274,8 @@ if (reportData.participants && reportData.participants.length > 0) {
       const supabase = createClient()
 
       // Update play report
+      // If this was a mini-card, promote it to a full card
+      const wasMini = report?.is_mini === true
       const { error: reportError } = await supabase
         .from('play_reports')
         .update({
@@ -289,6 +292,7 @@ if (reportData.participants && reportData.participants.length > 0) {
           private_notes: privateNotes || null,
           privacy_setting: privacySetting,
           updated_at: new Date().toISOString(),
+          ...(wasMini ? { is_mini: false, folder_id: null } : {}),
         })
         .eq('id', id)
 
@@ -300,20 +304,20 @@ if (reportData.participants && reportData.participants.length > 0) {
         .delete()
         .eq('play_report_id', id)
 
-const validParticipants = participants.filter(p => p.username.trim())
-	if (validParticipants.length > 0) {
-	await supabase.from('play_report_participants').insert(
-	validParticipants.map(p => ({
-	play_report_id: id,
-	username: p.username,
-	user_id: p.user_id || null,
-	role: p.role,
-	character_name: p.character_name || null,
-	handout: p.handout || null,
-	result: p.result || null,
-	}))
-	)
-	}
+      const validParticipants = participants.filter(p => p.username.trim())
+      if (validParticipants.length > 0) {
+        await supabase.from('play_report_participants').insert(
+          validParticipants.map(p => ({
+            play_report_id: id,
+            username: p.username,
+            user_id: p.user_id || null,
+            role: p.role,
+            character_name: p.character_name || null,
+            handout: p.handout || null,
+            result: p.result || null,
+          }))
+        )
+      }
 
       // Delete existing links and insert new ones
       await supabase
@@ -321,17 +325,17 @@ const validParticipants = participants.filter(p => p.username.trim())
         .delete()
         .eq('play_report_id', id)
 
-if (links.length > 0) {
-	await supabase.from('play_report_links').insert(
-	links.map((link, index) => ({
-	play_report_id: id,
-	link_type: link.link_type,
-	url: link.url,
-	title: link.title || null,
-	sort_order: index,
-	}))
-	)
-	}
+      if (links.length > 0) {
+        await supabase.from('play_report_links').insert(
+          links.map((link, index) => ({
+            play_report_id: id,
+            link_type: link.link_type,
+            url: link.url,
+            title: link.title || null,
+            sort_order: index,
+          }))
+        )
+      }
 
       // Delete existing images and insert new ones
       await supabase
@@ -404,7 +408,7 @@ if (links.length > 0) {
             <p className="text-sm text-muted-foreground">{report?.scenario_name}</p>
           </div>
         </div>
-        
+
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="destructive" size="sm" className="gap-2" disabled={deleting}>
@@ -444,29 +448,29 @@ if (links.length > 0) {
             <CardDescription>シナリオと日時の情報</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-<div className="space-y-2">
-	<Label>シナリオ画像</Label>
-	<ImageUpload
-	value={coverImageUrl}
-	onChange={setCoverImageUrl}
-	disabled={saving}
-	/>
-	</div>
+            <div className="space-y-2">
+              <Label>シナリオ画像</Label>
+              <ImageUpload
+                value={coverImageUrl}
+                onChange={setCoverImageUrl}
+                disabled={saving}
+              />
+            </div>
 
-    <div className="space-y-2">
-      <Label>追加画像</Label>
-      <MultiImageUpload
-        values={additionalImages}
-        onChange={setAdditionalImages}
-        maxImages={profile ? getProfileLimits(profile).maxImages : 3}
-        maxImageSize={profile ? getProfileLimits(profile).maxImageSize : 2}
-        disabled={saving}
-        showLimitWarning={profile?.tier === 'free'}
-      />
-    </div>
-	
-	<div className="space-y-2">
-	<Label htmlFor="scenarioName">シナリオ名 *</Label>
+            <div className="space-y-2">
+              <Label>追加画像</Label>
+              <MultiImageUpload
+                values={additionalImages}
+                onChange={setAdditionalImages}
+                maxImages={profile ? getProfileLimits(profile).maxImages : 3}
+                maxImageSize={profile ? getProfileLimits(profile).maxImageSize : 2}
+                disabled={saving}
+                showLimitWarning={profile?.tier === 'free'}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="scenarioName">シナリオ名 *</Label>
               <Input
                 id="scenarioName"
                 value={scenarioName}
@@ -480,11 +484,11 @@ if (links.length > 0) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="scenarioAuthor">シナリオ作者</Label>
-                <Input
-                  id="scenarioAuthor"
+                <ScenarioAuthorSuggest
+                  scenarioName={scenarioName}
                   value={scenarioAuthor}
-                  onChange={(e) => setScenarioAuthor(e.target.value)}
-                  placeholder="例: 作者名"
+                  onChange={setScenarioAuthor}
+                  placeholder="作者名"
                   disabled={saving}
                 />
               </div>
@@ -591,8 +595,8 @@ if (links.length > 0) {
                   </div>
                   <div className="space-y-2">
                     <Label>役割</Label>
-                    <Select 
-                      value={participant.role} 
+                    <Select
+                      value={participant.role}
                       onValueChange={(v) => updateParticipant(index, 'role', v)}
                       disabled={saving}
                     >
@@ -629,8 +633,8 @@ if (links.length > 0) {
                     </div>
                     <div className="space-y-2">
                       <Label>結果</Label>
-                      <Select 
-                        value={participant.result} 
+                      <Select
+                        value={participant.result}
                         onValueChange={(v) => updateParticipant(index, 'result', v)}
                         disabled={saving}
                       >
@@ -784,8 +788,8 @@ if (links.length > 0) {
             <CardDescription>この記録の公開範囲を設定</CardDescription>
           </CardHeader>
           <CardContent>
-            <Select 
-              value={privacySetting} 
+            <Select
+              value={privacySetting}
               onValueChange={(v: typeof privacySetting) => setPrivacySetting(v)}
               disabled={saving}
             >

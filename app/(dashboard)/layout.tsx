@@ -24,11 +24,17 @@ export default async function DashboardLayout({
   // Create profile if it doesn't exist
   if (!profile) {
     const username = user.user_metadata?.username || `user_${user.id.slice(0, 8)}`
-    await supabase.from('profiles').insert({
-      id: user.id,
-      username,
-      display_name: user.user_metadata?.display_name || username,
-    })
+    const { error: upsertError } = await supabase.from('profiles').upsert(
+      {
+        id: user.id,
+        username,
+        display_name: user.user_metadata?.display_name || username,
+      },
+      { onConflict: 'id' }
+    )
+    if (upsertError) {
+      console.error('[dashboard/layout] Profile upsert failed:', upsertError.message)
+    }
   }
 
   return (

@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Heart, Calendar, Edit3, Loader2 } from 'lucide-react'
+import { Heart, Calendar, Edit3, Loader2, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
@@ -18,13 +18,15 @@ interface SessionCardProps {
   showAuthor?: boolean
   showEdit?: boolean
   compact?: boolean
+  isFavorite?: boolean
 }
 
-export function SessionCard({ 
-  report, 
+export function SessionCard({
+  report,
   showAuthor = false,
   showEdit = false,
-  compact = false 
+  compact = false,
+  isFavorite = false
 }: SessionCardProps) {
   const router = useRouter()
   const [likesCount, setLikesCount] = useState(report.likes_count || 0)
@@ -39,13 +41,13 @@ export function SessionCard({
   async function handleLike(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    
+
     if (isLiking) return
     setIsLiking(true)
 
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (!user) {
       toast.error('いいねするにはログインが必要です')
       setIsLiking(false)
@@ -60,7 +62,7 @@ export function SessionCard({
           .delete()
           .eq('play_report_id', report.id)
           .eq('user_id', user.id)
-        
+
         setLikesCount(prev => Math.max(0, prev - 1))
         setHasLiked(false)
       } else {
@@ -71,7 +73,7 @@ export function SessionCard({
             play_report_id: report.id,
             user_id: user.id
           })
-        
+
         if (error && error.code !== '23505') { // Ignore duplicate key error
           throw error
         }
@@ -103,14 +105,25 @@ export function SessionCard({
         {/* Card Container */}
         <div className={cn(
           "relative overflow-hidden rounded-xl",
-          "bg-card border border-border/40",
+          "bg-card border",
+          isFavorite
+            ? "border-amber-400/60 dark:border-amber-500/40 ring-1 ring-amber-400/20"
+            : report.is_mini
+              ? "border-dashed border-border/60"
+              : "border-border/40",
           "transition-all duration-300 ease-out",
           "hover:shadow-xl hover:shadow-black/[0.08] dark:hover:shadow-black/30",
           "hover:border-border/60 hover:-translate-y-0.5"
         )}>
-          {/* Image wrapper */}
-          <div className="relative w-full bg-muted/30">
-            {report.cover_image_url ? (
+          {/* Favorite star badge */}
+          {isFavorite && (
+            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/90 text-white text-[10px] font-medium shadow-sm">
+              <Star className="w-3 h-3 fill-current" />
+            </div>
+          )}
+          {/* Image wrapper — only shown when image exists */}
+          {report.cover_image_url && (
+            <div className="relative w-full bg-muted/30">
               <Image
                 src={report.cover_image_url}
                 alt={report.scenario_name}
@@ -119,42 +132,57 @@ export function SessionCard({
                 className="w-full h-auto"
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               />
-            ) : (
-              <div className="aspect-[3/4] flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted">
-                <span className="text-5xl font-extralight text-muted-foreground/20 tracking-widest">
-                  {report.scenario_name.charAt(0).toUpperCase()}
-                </span>
-              </div>
-            )}
 
-            {/* Edit button overlay */}
-            {showEdit && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  router.push(`/reports/${report.id}/edit`)
-                }}
-                className="absolute top-2 right-2 p-2 rounded-full bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
-              >
-                <Edit3 className="w-4 h-4 text-muted-foreground" />
-              </button>
-            )}
-          </div>
+              {/* Edit button overlay */}
+              {showEdit && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    router.push(`/reports/${report.id}/edit`)
+                  }}
+                  className="absolute top-2 right-2 p-2 rounded-full bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
+                >
+                  <Edit3 className="w-4 h-4 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Edit button for cards without image */}
+          {!report.cover_image_url && showEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                router.push(`/reports/${report.id}/edit`)
+              }}
+              className="absolute top-2 right-2 p-2 rounded-full bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background z-10"
+            >
+              <Edit3 className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
 
           {/* Content area */}
           <div className="p-4 space-y-2.5">
+            {/* Mini badge */}
+            {report.is_mini && (
+              <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-dashed border-border/60">
+                ミニ
+              </span>
+            )}
             {/* Title */}
             <h3 className="font-medium text-sm leading-relaxed line-clamp-2 text-foreground/90 group-hover:text-foreground transition-colors">
               {report.scenario_name}
             </h3>
-            
+
             {/* Tags */}
             {report.tags && report.tags.length > 0 && (
               <ReportTagDisplay tags={report.tags} maxDisplay={2} />
             )}
-            
+
             {/* Participants (compact avatar stack) */}
             {report.participants && report.participants.length > 0 && (
               <div className="flex items-center gap-1.5">
@@ -192,7 +220,7 @@ export function SessionCard({
 
             {/* Author / Profile */}
             {showAuthor && report.profile && (
-              <button 
+              <button
                 type="button"
                 onClick={(e) => {
                   e.preventDefault()
@@ -212,14 +240,14 @@ export function SessionCard({
                 </span>
               </button>
             )}
-            
+
             {/* Meta row */}
             <div className="flex items-center justify-between pt-1">
               <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1.5">
                 <Calendar className="w-3 h-3" />
                 {formatDate(report.play_date_start)}
               </span>
-              
+
               {/* Like button */}
               <Button
                 variant="ghost"
@@ -234,8 +262,8 @@ export function SessionCard({
                   <Heart
                     className={cn(
                       'h-3.5 w-3.5 transition-all',
-                      hasLiked 
-                        ? 'fill-red-500 text-red-500' 
+                      hasLiked
+                        ? 'fill-red-500 text-red-500'
                         : 'text-muted-foreground hover:text-red-400'
                     )}
                   />
@@ -258,12 +286,12 @@ export function SessionCard({
 }
 
 /* Grid container with proper spacing */
-export function SessionCardGrid({ 
-  children, 
-  columns = 4 
-}: { 
+export function SessionCardGrid({
+  children,
+  columns = 4
+}: {
   children: React.ReactNode
-  columns?: 3 | 4 
+  columns?: 3 | 4
 }) {
   return (
     <div className={cn(

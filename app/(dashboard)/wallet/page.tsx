@@ -2,17 +2,21 @@
 
 import React from "react"
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Link from 'next/link'
-import { 
-  Plus, 
-  Search, 
-  LayoutGrid, 
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import {
+  Plus,
+  Search,
+  LayoutGrid,
   List,
   ArrowUpDown,
   BookOpen,
@@ -21,13 +25,17 @@ import {
   Clock,
   Loader2,
   FolderOpen,
-  ArrowLeft
+  ArrowLeft,
+  KeyRound,
+  X,
+  FileText,
+  HelpCircle
 } from 'lucide-react'
 import { SessionCard, SessionCardGrid } from '@/components/session-card'
-import { 
-  FolderCard, 
-  groupReportsIntoFolders, 
-  isVirtualFolder, 
+import {
+  FolderCard,
+  groupReportsIntoFolders,
+  isVirtualFolder,
   isPlayReport,
   type VirtualFolder,
   calculateFolderStats
@@ -40,15 +48,16 @@ type SortOption = 'date_desc' | 'date_asc' | 'name_asc' | 'name_desc'
 type FilterResult = 'all' | 'success' | 'failure'
 
 export default function WalletPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [myReports, setMyReports] = useState<PlayReport[]>([])
   const [folders, setFolders] = useState<ReportFolder[]>([])
   const [profile, setProfile] = useState<Profile | null>(null)
-  
+
   // View state
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [openFolder, setOpenFolder] = useState<VirtualFolder | ReportFolder | null>(null)
-  
+
   // Filter state
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('date_desc')
@@ -69,7 +78,7 @@ export default function WalletPage() {
     async function loadData() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (!user) return
 
       // Get user profile for username matching and tier info
@@ -114,13 +123,13 @@ export default function WalletPage() {
       setMyReports(myReportsData)
 
       const totalSessions = myReportsData.length
-      
+
       let asKP = 0
       let asPL = 0
       let surviveCount = 0
       let totalPLSessions = 0
       const countedReportIds = new Set<string>()
-      
+
       // Helper to check if participant matches current user
       const isUserParticipant = (p: { user_id?: string | null; username?: string | null }) => {
         if (p.user_id === user.id) return true
@@ -129,9 +138,9 @@ export default function WalletPage() {
         const userUsername = userProfile.username?.toLowerCase() || ''
         const userDisplayName = userProfile.display_name?.toLowerCase() || ''
         // Match @username format or display name
-        return username === `@${userUsername}` || 
-               username === userUsername ||
-               (userDisplayName && username === userDisplayName)
+        return username === `@${userUsername}` ||
+          username === userUsername ||
+          (userDisplayName && username === userDisplayName)
       }
 
       // Count from own reports' participants
@@ -159,7 +168,7 @@ export default function WalletPage() {
       const { data: allParticipations } = await supabase
         .from('play_report_participants')
         .select('play_report_id, role, result, user_id, username')
-      
+
       allParticipations?.forEach(p => {
         if (isUserParticipant(p)) {
           const key = `${p.play_report_id}-${p.role}`
@@ -182,8 +191,8 @@ export default function WalletPage() {
 
       const totalHours = myReportsData.reduce((acc, r) => acc + (r.play_duration || 0), 0)
 
-      const survivalRate = totalPLSessions > 0 
-        ? Math.round((surviveCount / totalPLSessions) * 100) 
+      const survivalRate = totalPLSessions > 0
+        ? Math.round((surviveCount / totalPLSessions) * 100)
         : 0
 
       setStats({
@@ -223,8 +232,8 @@ export default function WalletPage() {
   // Filter and sort function - works with both flat and folder views
   const filteredReports = useMemo(() => {
     // If viewing a folder, filter those reports
-    const reportsToFilter = openFolder && 'reports' in openFolder 
-      ? openFolder.reports 
+    const reportsToFilter = openFolder && 'reports' in openFolder
+      ? openFolder.reports
       : myReports
 
     let filtered = [...reportsToFilter]
@@ -232,7 +241,7 @@ export default function WalletPage() {
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(r => 
+      filtered = filtered.filter(r =>
         r.scenario_name.toLowerCase().includes(query) ||
         r.scenario_author?.toLowerCase().includes(query)
       )
@@ -240,7 +249,7 @@ export default function WalletPage() {
 
     // Year filter
     if (filterYear !== 'all') {
-      filtered = filtered.filter(r => 
+      filtered = filtered.filter(r =>
         r.play_date_start && new Date(r.play_date_start).getFullYear().toString() === filterYear
       )
     }
@@ -274,7 +283,7 @@ export default function WalletPage() {
     if (!searchQuery && filterYear === 'all' && filterResult === 'all') {
       return groupedItems
     }
-    
+
     // When filtering, show flat list instead of folders
     return filteredReports
   }, [groupedItems, filteredReports, searchQuery, filterYear, filterResult])
@@ -296,6 +305,8 @@ export default function WalletPage() {
           <p className="text-muted-foreground">作成した記録</p>
         </div>
         <div className="flex items-center gap-2">
+          <ShareCodeInput />
+          <MiniCardCreator userId={profile?.id} onCreated={() => window.location.reload()} />
           {canUseFolders && profile && (
             <CreateFolderButton
               userId={profile.id}
@@ -547,6 +558,331 @@ export default function WalletPage() {
           <EmptyState hasFilters={!!searchQuery || filterYear !== 'all' || filterResult !== 'all'} />
         )
       )}
+    </div>
+  )
+}
+
+function ShareCodeInput() {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [code, setCode] = useState('')
+  const [searching, setSearching] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [open])
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setCode('')
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  async function handleSearch() {
+    const trimmed = code.trim()
+    if (!trimmed) return
+
+    setSearching(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('play_reports')
+        .select('id')
+        .eq('share_code', trimmed.toUpperCase())
+        .single()
+
+      if (error || !data) {
+        toast.error('共有コードが見つかりませんでした')
+        return
+      }
+
+      router.push(`/reports/${data.id}`)
+      setOpen(false)
+      setCode('')
+    } catch {
+      toast.error('検索に失敗しました')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button
+        variant="outline"
+        className="gap-2"
+        onClick={() => setOpen(true)}
+      >
+        <KeyRound className="w-4 h-4" />
+        <span className="hidden sm:inline">コードを入力</span>
+      </Button>
+    )
+  }
+
+  return (
+    <div ref={containerRef} className="flex items-center gap-1 animate-in fade-in slide-in-from-right-2 duration-200">
+      <div className="relative">
+        <Input
+          ref={inputRef}
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSearch()
+            if (e.key === 'Escape') { setOpen(false); setCode('') }
+          }}
+          placeholder="共有コード"
+          maxLength={10}
+          disabled={searching}
+          className="w-[130px] sm:w-[160px] h-9 uppercase text-sm pr-8"
+        />
+        {searching ? (
+          <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+        ) : code ? (
+          <button
+            type="button"
+            onClick={handleSearch}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        ) : null}
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9 shrink-0"
+        onClick={() => { setOpen(false); setCode('') }}
+      >
+        <X className="w-4 h-4" />
+      </Button>
+    </div>
+  )
+}
+
+function MiniCardCreator({ userId, onCreated }: { userId?: string; onCreated: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [creating, setCreating] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  async function handleCreate() {
+    if (!userId || !text.trim()) return
+
+    const lines = text
+      .split('\n')
+      .map(l => l
+        .replace(/^[\s\t]*/, '')                                    // leading whitespace/tabs
+        .replace(/^[\d０-９]+[.)）．]\s*/, '')                       // numbered lists: 1. 1) １）etc
+        .replace(/^[-\-ー‐—―─*＊・·•◦◆◇●○□■▪▸▹▻►>＞]\s*/, '')  // bullet chars (half & full-width)
+        .trim()
+      )
+      .filter(l => l.length > 0)
+
+    if (lines.length === 0) {
+      toast.error('シナリオ名を入力してください')
+      return
+    }
+
+    setCreating(true)
+    try {
+      const supabase = createClient()
+
+      // Check for existing scenario names in the user's wallet
+      const { data: existingReports } = await supabase
+        .from('play_reports')
+        .select('scenario_name')
+        .eq('user_id', userId)
+
+      const existingNames = new Set(
+        (existingReports || []).map(r => r.scenario_name.toLowerCase().trim())
+      )
+
+      const newLines = lines.filter(name => !existingNames.has(name.toLowerCase().trim()))
+      const skippedCount = lines.length - newLines.length
+
+      if (newLines.length === 0) {
+        toast.error('すべてのシナリオがすでにウォレットに存在しています')
+        return
+      }
+
+      // Find or create the "ミニカード" folder
+      let folderId: string | null = null
+      const { data: existingFolder } = await supabase
+        .from('report_folders')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('name', 'ミニカード')
+        .maybeSingle()
+
+      if (existingFolder) {
+        folderId = existingFolder.id
+      } else {
+        const { data: newFolder, error: folderError } = await supabase
+          .from('report_folders')
+          .insert({
+            user_id: userId,
+            name: 'ミニカード',
+            description: '一括登録されたミニカード',
+            sort_order: 999,
+          })
+          .select('id')
+          .single()
+
+        if (folderError) {
+          console.error('Folder creation failed:', folderError)
+          toast.error('フォルダの作成に失敗しました')
+          return
+        }
+        folderId = newFolder.id
+      }
+
+      // Bulk insert mini-cards (only new ones)
+      const now = new Date().toISOString()
+      const { error: insertError } = await supabase
+        .from('play_reports')
+        .insert(
+          newLines.map((name) => ({
+            user_id: userId,
+            scenario_name: name,
+            is_mini: true,
+            play_date_start: now,
+            privacy_setting: 'public',
+            folder_id: folderId,
+          }))
+        )
+
+      if (insertError) {
+        console.error('Mini-card creation failed:', insertError)
+        toast.error('ミニカードの作成に失敗しました')
+        return
+      }
+
+      if (skippedCount > 0) {
+        toast.success(`${newLines.length}件のミニカードを作成しました（${skippedCount}件は既に存在するためスキップ）`)
+      } else {
+        toast.success(`${newLines.length}件のミニカードを作成しました`)
+      }
+      setOpen(false)
+      setText('')
+      onCreated()
+    } catch {
+      toast.error('作成に失敗しました')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const lineCount = text.split('\n').filter(l => l.trim().length > 0).length
+
+  if (!open) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setOpen(true)}
+          >
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">ミニカード</span>
+            <HelpCircle className="w-3 h-3 text-muted-foreground hidden sm:inline" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[280px] text-left leading-relaxed">
+          ミニカードとは、箇条書きになっている通過済みシナリオをコピペして仮置きできる機能です。編集することで、カードにして詳細の編集ができます。
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <div ref={containerRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-in fade-in duration-200">
+      {/* Loading overlay */}
+      {creating && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <Card className="w-full max-w-xs mx-4 bg-card border-border">
+            <CardContent className="p-6 flex flex-col items-center gap-4">
+              <Loader2 className="w-10 h-10 animate-spin text-primary" />
+              <div className="text-center space-y-1">
+                <p className="font-semibold text-sm">ミニカードを作成中...</p>
+                <p className="text-xs text-muted-foreground">
+                  {lineCount}件のシナリオを処理しています。
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  しばらくお待ちください
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Card className="w-full max-w-lg mx-4 bg-card border-border">
+        <CardContent className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                ミニカード一括作成
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                通過済みシナリオを1行ずつ入力（50件以上もOK）
+              </p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setOpen(false)} disabled={creating}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`毒入りスープ\n狂気山脈\n水底よりの使者\n深きものの結婚式\nペルソナ\n毒蛇の園\n…`}
+            rows={15}
+            disabled={creating}
+            className="font-mono text-sm min-h-[200px] max-h-[50vh] resize-y"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              {lineCount > 0 ? `${lineCount}件のシナリオ` : 'シナリオ名を改行区切りで入力'}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setOpen(false)} disabled={creating}>
+                キャンセル
+              </Button>
+              <Button onClick={handleCreate} disabled={creating || lineCount === 0}>
+                {creating ? (
+                  <><Loader2 className="w-4 h-4 animate-spin mr-2" />作成中...</>
+                ) : (
+                  `${lineCount}件を作成`
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

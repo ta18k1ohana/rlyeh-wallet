@@ -17,10 +17,11 @@ import { MultiImageUpload } from '@/components/multi-image-upload'
 import { SuccessAnimation } from '@/components/success-animation'
 import { LinkManager, type ReportLink } from '@/components/link-manager'
 import { UserAutocomplete } from '@/components/user-autocomplete'
-import { 
-  ArrowLeft, 
-  Loader2, 
-  Plus, 
+import { ScenarioAuthorSuggest } from '@/components/scenario-author-suggest'
+import {
+  ArrowLeft,
+  Loader2,
+  Plus,
   Trash2,
   User,
   Copy,
@@ -47,7 +48,7 @@ export default function NewReportPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [createdReportId, setCreatedReportId] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
-  
+
   // Fetch user profile for tier limits
   React.useEffect(() => {
     async function fetchProfile() {
@@ -64,9 +65,9 @@ export default function NewReportPage() {
     }
     fetchProfile()
   }, [])
-  
+
   const limits = getProfileLimits(profile)
-  
+
   // Form state
   const [scenarioName, setScenarioName] = useState('')
   const [scenarioAuthor, setScenarioAuthor] = useState('')
@@ -82,22 +83,22 @@ export default function NewReportPage() {
   const [twitterCopied, setTwitterCopied] = useState(false)
   const [privacySetting, setPrivacySetting] = useState<'public' | 'followers' | 'private'>('followers')
   const [links, setLinks] = useState<ReportLink[]>([])
-const [participants, setParticipants] = useState<Participant[]>([
+  const [participants, setParticipants] = useState<Participant[]>([
     { username: '', user_id: null, role: 'PL', character_name: '', handout: '', result: '' }
   ])
 
-function addParticipant() {
-  setParticipants([...participants, { username: '', user_id: null, role: 'PL', character_name: '', handout: '', result: '' }])
+  function addParticipant() {
+    setParticipants([...participants, { username: '', user_id: null, role: 'PL', character_name: '', handout: '', result: '' }])
   }
 
   function removeParticipant(index: number) {
     setParticipants(participants.filter((_, i) => i !== index))
   }
 
-function updateParticipant(index: number, field: keyof Participant, value: string | null) {
-  const updated = [...participants]
-  updated[index] = { ...updated[index], [field]: value }
-  setParticipants(updated)
+  function updateParticipant(index: number, field: keyof Participant, value: string | null) {
+    const updated = [...participants]
+    updated[index] = { ...updated[index], [field]: value }
+    setParticipants(updated)
   }
 
   function updateParticipantWithUser(index: number, username: string, userId: string | null) {
@@ -110,11 +111,11 @@ function updateParticipant(index: number, field: keyof Participant, value: strin
     const plParticipants = participants.filter(p => p.role === 'PL' && p.character_name)
     const characterInfo = plParticipants.map(p => {
       const hoText = p.handout ? `(${p.handout})` : ''
-      const resultIcon = p.result === 'survive' ? '' : 
-                        p.result === 'lost' ? '†' : ''
+      const resultIcon = p.result === 'survive' ? '' :
+        p.result === 'lost' ? '†' : ''
       return `${p.character_name}${hoText}${resultIcon}`
     }).join('/')
-    
+
     let text = `【通過】${scenarioName}`
     if (scenarioAuthor) text += ` / ${scenarioAuthor}`
     text += '\n'
@@ -122,7 +123,7 @@ function updateParticipant(index: number, field: keyof Participant, value: strin
     if (endType) text += `エンド: ${endType}\n`
     if (endDescription) text += `${endDescription}\n`
     text += '\n#TRPG #CoC'
-    
+
     return text
   }
 
@@ -178,15 +179,15 @@ function updateParticipant(index: number, field: keyof Participant, value: strin
         const { error: participantsError } = await supabase
           .from('play_report_participants')
           .insert(
-validParticipants.map(p => ({
-  play_report_id: report.id,
-  username: p.username,
-  user_id: p.user_id || null,
-  role: p.role,
-  character_name: p.character_name || null,
-  handout: p.handout || null,
-  result: p.result || null,
-  }))
+            validParticipants.map(p => ({
+              play_report_id: report.id,
+              username: p.username,
+              user_id: p.user_id || null,
+              role: p.role,
+              character_name: p.character_name || null,
+              handout: p.handout || null,
+              result: p.result || null,
+            }))
           )
 
         if (participantsError) throw participantsError
@@ -237,8 +238,8 @@ validParticipants.map(p => ({
 
   return (
     <>
-      <SuccessAnimation 
-        show={showSuccess} 
+      <SuccessAnimation
+        show={showSuccess}
         onComplete={() => {
           if (createdReportId) {
             router.push(`/reports/${createdReportId}`)
@@ -278,20 +279,20 @@ validParticipants.map(p => ({
                 </p>
               </div>
 
-<div className="space-y-2">
-              <Label>追加画像</Label>
-              <MultiImageUpload
-                values={additionalImages}
-                onChange={setAdditionalImages}
-                maxImages={limits.maxImages}
-                maxImageSize={limits.maxImageSize}
-                disabled={loading}
-                showLimitWarning={profile?.tier === 'free'}
-              />
-              <p className="text-xs text-muted-foreground">
-                キャラシ、シーン画像など（最大{limits.maxImages}枚、{limits.maxImageSize}px以下にリサイズ）
-              </p>
-            </div>
+              <div className="space-y-2">
+                <Label>追加画像</Label>
+                <MultiImageUpload
+                  values={additionalImages}
+                  onChange={setAdditionalImages}
+                  maxImages={limits.maxImages}
+                  maxImageSize={limits.maxImageSize}
+                  disabled={loading}
+                  showLimitWarning={profile?.tier === 'free'}
+                />
+                <p className="text-xs text-muted-foreground">
+                  キャラシ、シーン画像など（最大{limits.maxImages}枚、{limits.maxImageSize}px以下にリサイズ）
+                </p>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="scenarioName">シナリオ名 *</Label>
@@ -308,10 +309,10 @@ validParticipants.map(p => ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="scenarioAuthor">シナリオ作者</Label>
-                  <Input
-                    id="scenarioAuthor"
+                  <ScenarioAuthorSuggest
+                    scenarioName={scenarioName}
                     value={scenarioAuthor}
-                    onChange={(e) => setScenarioAuthor(e.target.value)}
+                    onChange={setScenarioAuthor}
                     placeholder="作者名"
                     disabled={loading}
                   />
@@ -381,10 +382,10 @@ validParticipants.map(p => ({
                   <CardTitle>参加者</CardTitle>
                   <CardDescription>KP/PLの情報を追加</CardDescription>
                 </div>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={addParticipant}
                   disabled={loading}
                   className="bg-transparent"
@@ -428,8 +429,8 @@ validParticipants.map(p => ({
                     </div>
                     <div className="space-y-2">
                       <Label>役割</Label>
-                      <Select 
-                        value={participant.role} 
+                      <Select
+                        value={participant.role}
                         onValueChange={(v) => updateParticipant(index, 'role', v)}
                         disabled={loading}
                       >
@@ -464,8 +465,8 @@ validParticipants.map(p => ({
                         </div>
                         <div className="space-y-2">
                           <Label>結果</Label>
-                          <Select 
-                            value={participant.result} 
+                          <Select
+                            value={participant.result}
                             onValueChange={(v) => updateParticipant(index, 'result', v)}
                             disabled={loading}
                           >
@@ -522,28 +523,28 @@ validParticipants.map(p => ({
                 </p>
               </div>
 
-<div className="space-y-2">
-              <Label htmlFor="impression">感想・メモ（自分だけに見える）</Label>
-              <Textarea
-                id="impression"
-                value={impression}
-                onChange={(e) => {
-                  if (e.target.value.length <= limits.maxImpressionLength) {
-                    setImpression(e.target.value)
-                  }
-                }}
-                placeholder="自分だけに見える感想やメモを記入..."
-                rows={4}
-                disabled={loading}
-                maxLength={limits.maxImpressionLength}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>この内容は他のユーザーには表示されません</span>
-                <span className={impression.length >= limits.maxImpressionLength ? 'text-amber-600' : ''}>
-                  {impression.length}/{limits.maxImpressionLength}文字
-                </span>
+              <div className="space-y-2">
+                <Label htmlFor="impression">感想・メモ（自分だけに見える）</Label>
+                <Textarea
+                  id="impression"
+                  value={impression}
+                  onChange={(e) => {
+                    if (e.target.value.length <= limits.maxImpressionLength) {
+                      setImpression(e.target.value)
+                    }
+                  }}
+                  placeholder="自分だけに見える感想やメモを記入..."
+                  rows={4}
+                  disabled={loading}
+                  maxLength={limits.maxImpressionLength}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>この内容は他のユーザーには表示されません</span>
+                  <span className={impression.length >= limits.maxImpressionLength ? 'text-amber-600' : ''}>
+                    {impression.length}/{limits.maxImpressionLength}文字
+                  </span>
+                </div>
               </div>
-            </div>
             </CardContent>
           </Card>
 
@@ -613,8 +614,8 @@ validParticipants.map(p => ({
               <CardDescription>この記録の公開範囲を設定</CardDescription>
             </CardHeader>
             <CardContent>
-              <Select 
-                value={privacySetting} 
+              <Select
+                value={privacySetting}
                 onValueChange={(v: typeof privacySetting) => setPrivacySetting(v)}
                 disabled={loading}
               >

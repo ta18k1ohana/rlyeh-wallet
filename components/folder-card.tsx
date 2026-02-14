@@ -3,7 +3,7 @@
 import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Folder, Heart, Clock, Layers } from 'lucide-react'
+import { Heart, Clock, Layers } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import type { ReportFolder, PlayReport } from '@/lib/types'
@@ -17,7 +17,7 @@ interface FolderCardProps {
 export function calculateFolderStats(reports: PlayReport[]) {
   const totalLikes = reports.reduce((sum, r) => sum + (r.likes_count || 0), 0)
   const totalDuration = reports.reduce((sum, r) => sum + (r.play_duration || 0), 0)
-  
+
   // Find KP info from first report's participants
   let kpInfo: { username: string; avatar_url: string | null } | null = null
   for (const report of reports) {
@@ -53,15 +53,15 @@ function formatDuration(minutes: number): string {
 }
 
 export function FolderCard({ folder, onClick }: FolderCardProps) {
-  const stats = folder.reports 
+  const stats = folder.reports
     ? calculateFolderStats(folder.reports)
     : {
-        report_count: folder.report_count || 0,
-        total_likes: folder.total_likes || 0,
-        total_duration: folder.total_duration || 0,
-        cover_image_url: folder.cover_image_url || null,
-        kp_info: folder.kp_info || null,
-      }
+      report_count: folder.report_count || 0,
+      total_likes: folder.total_likes || 0,
+      total_duration: folder.total_duration || 0,
+      cover_image_url: folder.cover_image_url || null,
+      kp_info: folder.kp_info || null,
+    }
 
   return (
     <div className="group break-inside-avoid mb-5">
@@ -78,15 +78,15 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
           "hover:shadow-xl hover:shadow-black/[0.08] dark:hover:shadow-black/30",
           "hover:border-border/60 hover:-translate-y-0.5"
         )}>
-          {/* Image wrapper with folder stack effect */}
-          <div className="relative w-full aspect-[4/3] bg-muted/30">
-            {/* Stacked card effect behind */}
-            <div className="absolute -top-1 left-2 right-2 h-3 rounded-t-lg bg-muted/50 border border-b-0 border-border/30" />
-            <div className="absolute -top-2 left-4 right-4 h-2 rounded-t-lg bg-muted/30 border border-b-0 border-border/20" />
-            
-            {/* Main image */}
-            <div className="relative w-full h-full">
-              {stats.cover_image_url ? (
+          {/* Image wrapper with folder stack effect — only shown when image exists */}
+          {stats.cover_image_url ? (
+            <div className="relative w-full aspect-[4/3] bg-muted/30">
+              {/* Stacked card effect behind */}
+              <div className="absolute -top-1 left-2 right-2 h-3 rounded-t-lg bg-muted/50 border border-b-0 border-border/30" />
+              <div className="absolute -top-2 left-4 right-4 h-2 rounded-t-lg bg-muted/30 border border-b-0 border-border/20" />
+
+              {/* Main image */}
+              <div className="relative w-full h-full">
                 <Image
                   src={stats.cover_image_url || "/placeholder.svg"}
                   alt={folder.name}
@@ -94,19 +94,21 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
                   className="object-contain p-3"
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-muted/50 to-muted">
-                  <Folder className="w-12 h-12 text-muted-foreground/30" />
-                </div>
-              )}
-            </div>
+              </div>
 
-            {/* Card count badge */}
-            <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full bg-background/90 backdrop-blur-sm border border-border/50">
-              <Layers className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs font-medium">{stats.report_count}</span>
+              {/* Card count badge */}
+              <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full bg-background/90 backdrop-blur-sm border border-border/50">
+                <Layers className="w-3 h-3 text-muted-foreground" />
+                <span className="text-xs font-medium">{stats.report_count}</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Card count badge only, no image area */
+            <div className="flex items-center gap-1 px-3 pt-3">
+              <Layers className="w-3 h-3 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">{stats.report_count}件</span>
+            </div>
+          )}
 
           {/* Content area */}
           <div className="p-4 space-y-2.5">
@@ -114,7 +116,7 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
             <h3 className="font-medium text-sm leading-relaxed line-clamp-2 text-foreground/90 group-hover:text-foreground transition-colors">
               {folder.name}
             </h3>
-            
+
             {/* KP Info */}
             {stats.kp_info && (
               <div className="flex items-center gap-2">
@@ -129,7 +131,7 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
                 </span>
               </div>
             )}
-            
+
             {/* Stats row */}
             <div className="flex items-center gap-4 pt-1">
               {/* Total likes */}
@@ -137,7 +139,7 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
                 <Heart className="w-3 h-3" />
                 {stats.total_likes}
               </span>
-              
+
               {/* Total duration */}
               {stats.total_duration > 0 && (
                 <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
@@ -167,7 +169,7 @@ export function groupReportsIntoFolders(
 ): (PlayReport | VirtualFolder | ReportFolder)[] {
   const result: (PlayReport | VirtualFolder | ReportFolder)[] = []
   const usedReportIds = new Set<string>()
-  
+
   // First, add reports that are in existing folders
   for (const folder of existingFolders) {
     const folderReports = reports.filter(r => r.folder_id === folder.id)
@@ -179,26 +181,26 @@ export function groupReportsIntoFolders(
       })
     }
   }
-  
+
   // Group remaining reports by scenario_name
   const reportsByName = new Map<string, PlayReport[]>()
   for (const report of reports) {
     if (usedReportIds.has(report.id)) continue
-    
+
     const name = report.scenario_name.toLowerCase().trim()
     if (!reportsByName.has(name)) {
       reportsByName.set(name, [])
     }
     reportsByName.get(name)!.push(report)
   }
-  
+
   // Create virtual folders for groups of 2+ reports, otherwise add as single
   for (const [, groupReports] of reportsByName) {
     if (groupReports.length >= 2) {
       // Auto-group as virtual folder
       result.push({
         name: groupReports[0].scenario_name,
-        reports: groupReports.sort((a, b) => 
+        reports: groupReports.sort((a, b) =>
           new Date(b.play_date_start).getTime() - new Date(a.play_date_start).getTime()
         ),
         isVirtual: true,
@@ -208,7 +210,7 @@ export function groupReportsIntoFolders(
       result.push(groupReports[0])
     }
   }
-  
+
   return result
 }
 

@@ -24,17 +24,17 @@ export function XShareButton({
         const now = new Date()
         const month = now.getMonth() + 1
 
-        let text = `📅 ${month}月に回りたいシナリオ\n\n`
+        let text = `${month}月に回りたいシナリオ\n\n`
 
         wantToPlay.slice(0, 10).forEach((pref, index) => {
             text += `${index + 1}. ${pref.scenario_name}`
             if (pref.scenario_author) {
-                text += ` (${pref.scenario_author})`
+                text += `（${pref.scenario_author}）`
             }
             text += '\n'
         })
 
-        text += '\n#TRPG #回りたいシナリオ #ルルイエウォレット'
+        text += '\n#月初めだから回りたいシナリオ10個言う\n#TRPG #ルルイエウォレット'
 
         const encodedText = encodeURIComponent(text)
         const twitterUrl = `https://twitter.com/intent/tweet?text=${encodedText}`

@@ -192,11 +192,17 @@ export default async function DashboardPage() {
   // =============================================
   // Trending Scenarios (this month)
   // =============================================
+  const currentDay = now.getDate()
+  const isMeasuring = currentDay <= 3
+
+  const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
   const { data: trendingData } = await supabase
     .from('play_reports')
     .select('scenario_name, scenario_author')
     .eq('privacy_setting', 'public')
-    .gte('created_at', thisMonthStart.toISOString())
+    .eq('is_mini', false)
+    .gte('play_date_start', thisMonthStr)
 
   // Count scenario popularity
   const scenarioCounts = new Map<string, { name: string; author: string | null; count: number }>()
@@ -255,6 +261,7 @@ export default async function DashboardPage() {
         `)
         .in('scenario_name', scenarioNames)
         .eq('privacy_setting', 'public')
+        .eq('is_mini', false)
         .neq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10)
@@ -304,6 +311,7 @@ export default async function DashboardPage() {
         profile:profiles!play_reports_user_id_fkey(*)
       `)
       .eq('privacy_setting', 'public')
+      .eq('is_mini', false)
       .gte('created_at', thirtyDaysAgo.toISOString())
       .neq('user_id', user.id)
       .limit(20)
@@ -332,6 +340,7 @@ export default async function DashboardPage() {
       likes:likes(id)
     `)
     .eq('privacy_setting', 'public')
+    .eq('is_mini', false)
     .neq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(50)
@@ -378,6 +387,7 @@ export default async function DashboardPage() {
       `)
       .in('user_id', friendIds)
       .in('privacy_setting', ['public', 'followers'])
+      .eq('is_mini', false)
       .order('play_date_start', { ascending: false })
       .limit(10)
 
@@ -410,6 +420,7 @@ export default async function DashboardPage() {
         `)
         .in('user_id', streamerIds)
         .eq('privacy_setting', 'public')
+        .eq('is_mini', false)
         .order('play_date_start', { ascending: false })
         .limit(10)
 
@@ -486,6 +497,8 @@ export default async function DashboardPage() {
         uniqueScenarios={uniqueScenarios}
         survivalRate={survivalRate}
         trendingScenarios={trendingScenarios}
+        isMeasuring={isMeasuring}
+        measurementDay={currentDay}
         dailyCounts={dailyCounts}
         activeFriends={activeFriends}
       />
@@ -502,6 +515,8 @@ function RightSidebarContent({
   uniqueScenarios,
   survivalRate,
   trendingScenarios,
+  isMeasuring,
+  measurementDay,
   dailyCounts,
   activeFriends,
 }: {
@@ -512,6 +527,8 @@ function RightSidebarContent({
   uniqueScenarios: number
   survivalRate: number
   trendingScenarios: { name: string; author: string | null; count: number; trend: 'up' | 'new' | 'stable' }[]
+  isMeasuring: boolean
+  measurementDay: number
   dailyCounts: number[]
   activeFriends: { profile: any; lastActive: string; recentScenario?: string }[]
 }) {
@@ -543,9 +560,7 @@ function RightSidebarContent({
       <ActiveFriends friends={activeFriends} />
 
       {/* Trending */}
-      {trendingScenarios.length > 0 && (
-        <TrendingScenarios scenarios={trendingScenarios} />
-      )}
+      <TrendingScenarios scenarios={trendingScenarios} isMeasuring={isMeasuring} measurementDay={measurementDay} />
 
       {/* Mythos Tip — daily flavor text */}
       <div className="mt-4">

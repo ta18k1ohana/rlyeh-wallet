@@ -23,6 +23,8 @@ interface RightSidebarProps {
     uniqueScenarios: number
     // Trending
     trendingScenarios: TrendingScenario[]
+    isMeasuring?: boolean
+    measurementDay?: number
 }
 
 export function RightSidebar({
@@ -32,6 +34,8 @@ export function RightSidebar({
     uniqueAuthors,
     uniqueScenarios,
     trendingScenarios,
+    isMeasuring,
+    measurementDay,
 }: RightSidebarProps) {
     return (
         <div className="space-y-4 py-4">
@@ -72,8 +76,8 @@ export function RightSidebar({
             </Card>
 
             {/* Trending */}
-            {trendingScenarios.length > 0 && (
-                <TrendingScenarios scenarios={trendingScenarios} />
+            {(isMeasuring || trendingScenarios.length > 0) && (
+                <TrendingScenarios scenarios={trendingScenarios} isMeasuring={isMeasuring} measurementDay={measurementDay} />
             )}
 
             {/* Footer Links */}

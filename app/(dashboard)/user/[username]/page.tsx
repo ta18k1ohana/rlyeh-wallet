@@ -44,7 +44,7 @@ function TwitterIcon({ className }: { className?: string }) {
 
 function FriendCard({ friend, isMutual, onClose }: { friend: Profile; isMutual?: boolean; onClose?: () => void }) {
   const router = useRouter()
-  
+
   return (
     <button
       type="button"
@@ -76,12 +76,12 @@ function FriendCard({ friend, isMutual, onClose }: { friend: Profile; isMutual?:
   )
 }
 
-function FriendsDialog({ 
-  friends, 
-  mutualFriends, 
+function FriendsDialog({
+  friends,
+  mutualFriends,
   triggerLabel,
-  isOwnProfile 
-}: { 
+  isOwnProfile
+}: {
   friends: FriendWithProfile[]
   mutualFriends: FriendWithProfile[]
   triggerLabel: string
@@ -89,7 +89,7 @@ function FriendsDialog({
 }) {
   const [activeTab, setActiveTab] = useState<'all' | 'mutual'>('all')
   const [open, setOpen] = useState(false)
-  
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -102,7 +102,7 @@ function FriendsDialog({
         <DialogHeader>
           <DialogTitle>フレンド一覧</DialogTitle>
         </DialogHeader>
-        
+
         {!isOwnProfile && mutualFriends.length > 0 ? (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'mutual')}>
             <TabsList className="grid w-full grid-cols-2">
@@ -172,13 +172,13 @@ export default function UserProfilePage() {
   useEffect(() => {
     async function fetchData() {
       if (!username) return
-      
+
       const supabase = createClient()
-      
+
       // Get current user
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
-      
+
       // Fetch profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -271,7 +271,7 @@ export default function UserProfilePage() {
         .eq('following_id', profileData.id)
 
       const followerIds = followersData?.map(f => f.follower_id) || []
-      
+
       // Mutual friends = users who both follow and are followed by this profile
       const mutualIds = followingIds.filter(id => followerIds.includes(id))
 
@@ -300,10 +300,10 @@ export default function UserProfilePage() {
           .eq('follower_id', user.id)
 
         const myFollowingIds = myFollowing?.map(f => f.following_id) || []
-        
+
         // Mutual with current user = friends of the profile that I also follow
         const mutualWithMe = mutualIds.filter(id => myFollowingIds.includes(id))
-        
+
         if (mutualWithMe.length > 0) {
           const { data: mutualProfiles } = await supabase
             .from('profiles')
@@ -345,9 +345,9 @@ export default function UserProfilePage() {
           const profileUsername = profileData.username?.toLowerCase() || ''
           const profileDisplayName = profileData.display_name?.toLowerCase() || ''
           // Match @username format or display name
-          return pUsername === `@${profileUsername}` || 
-                 pUsername === profileUsername ||
-                 (profileDisplayName && pUsername === profileDisplayName)
+          return pUsername === `@${profileUsername}` ||
+            pUsername === profileUsername ||
+            (profileDisplayName && pUsername === profileDisplayName)
         }
 
         // Count from own reports' participants
@@ -396,8 +396,8 @@ export default function UserProfilePage() {
           })
         }
 
-        const survivalRate = totalPLSessions > 0 
-          ? Math.round((surviveCount / totalPLSessions) * 100) 
+        const survivalRate = totalPLSessions > 0
+          ? Math.round((surviveCount / totalPLSessions) * 100)
           : 0
 
         setStats({
@@ -430,7 +430,7 @@ export default function UserProfilePage() {
 
   async function sendFriendRequest() {
     if (!currentUserId || !profile) return
-    
+
     setActionLoading(true)
     const supabase = createClient()
 
@@ -452,11 +452,11 @@ export default function UserProfilePage() {
         setActionLoading(false)
         return
       }
-      
+
       // If rejected or other status, update to pending
       const { error: updateError } = await supabase
         .from('friend_requests')
-        .update({ 
+        .update({
           status: 'pending',
           from_user_id: currentUserId,
           to_user_id: profile.id,
@@ -504,7 +504,7 @@ export default function UserProfilePage() {
 
   async function acceptFriendRequest() {
     if (!currentUserId || !profile) return
-    
+
     setActionLoading(true)
     const supabase = createClient()
 
@@ -586,9 +586,9 @@ export default function UserProfilePage() {
             </div>
             <p className="text-sm text-muted-foreground">@{profile.username}</p>
             {profile.twitter_id && (
-              <a 
-                href={`https://twitter.com/${profile.twitter_id}`} 
-                target="_blank" 
+              <a
+                href={`https://twitter.com/${profile.twitter_id}`}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground mt-1"
               >
@@ -620,9 +620,9 @@ export default function UserProfilePage() {
             ) : (
               <>
                 {friendRequestStatus === 'none' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={sendFriendRequest}
                     disabled={actionLoading}
                     className="gap-2 bg-transparent"
@@ -642,9 +642,9 @@ export default function UserProfilePage() {
                   </Button>
                 )}
                 {friendRequestStatus === 'received' && (
-                  <Button 
-                    variant="default" 
-                    size="sm" 
+                  <Button
+                    variant="default"
+                    size="sm"
                     onClick={acceptFriendRequest}
                     disabled={actionLoading}
                     className="gap-2"
@@ -675,22 +675,20 @@ export default function UserProfilePage() {
           <button
             type="button"
             onClick={() => setStatsTab('stats')}
-            className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-              statsTab === 'stats'
+            className={`px-3 py-1.5 text-sm rounded-full transition-colors ${statsTab === 'stats'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-            }`}
+              }`}
           >
             統計
           </button>
           <button
             type="button"
             onClick={() => setStatsTab('profile')}
-            className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-              statsTab === 'profile'
+            className={`px-3 py-1.5 text-sm rounded-full transition-colors ${statsTab === 'profile'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-            }`}
+              }`}
           >
             プロフィール
           </button>
@@ -729,9 +727,18 @@ export default function UserProfilePage() {
             </div>
           ) : (
             <SessionCardGrid columns={4}>
-              {reports.map((report) => (
-                <SessionCard key={report.id} report={report} showEdit={isOwnProfile} />
-              ))}
+              {/* Favorite reports first */}
+              {reports
+                .filter(r => profile.favorite_report_ids?.includes(r.id))
+                .map((report) => (
+                  <SessionCard key={report.id} report={report} showEdit={isOwnProfile} isFavorite />
+                ))}
+              {/* Remaining reports */}
+              {reports
+                .filter(r => !profile.favorite_report_ids?.includes(r.id))
+                .map((report) => (
+                  <SessionCard key={report.id} report={report} showEdit={isOwnProfile} />
+                ))}
             </SessionCardGrid>
           )}
         </TabsContent>

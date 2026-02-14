@@ -52,6 +52,7 @@ export interface PlayReport {
   privacy_setting: 'public' | 'followers' | 'private'
   twitter_post_url: string | null
   private_notes: string | null
+  is_mini: boolean
   is_favorite: boolean
   folder_id: string | null
   folder_sort_order: number
