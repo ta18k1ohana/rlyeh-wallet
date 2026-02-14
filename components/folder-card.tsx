@@ -170,14 +170,39 @@ export function groupReportsIntoFolders(
   const result: (PlayReport | VirtualFolder | ReportFolder)[] = []
   const usedReportIds = new Set<string>()
 
-  // First, add reports that are in existing folders
+  // Find the "ミニカード" folder (if it exists)
+  const miniCardFolder = existingFolders.find(f => f.name === 'ミニカード')
+
+  // Collect all mini card reports (is_mini=true), regardless of folder_id
+  const orphanedMiniCards = miniCardFolder
+    ? reports.filter(r => r.is_mini && r.folder_id !== miniCardFolder.id)
+    : []
+
+  // First, add reports that are in existing folders (including empty folders)
   for (const folder of existingFolders) {
-    const folderReports = reports.filter(r => r.folder_id === folder.id)
-    if (folderReports.length > 0) {
-      for (const r of folderReports) usedReportIds.add(r.id)
+    let folderReports = reports.filter(r => r.folder_id === folder.id)
+
+    // If this is the ミニカード folder, also include orphaned mini cards
+    if (miniCardFolder && folder.id === miniCardFolder.id) {
+      folderReports = [...folderReports, ...orphanedMiniCards]
+    }
+
+    for (const r of folderReports) usedReportIds.add(r.id)
+    result.push({
+      ...folder,
+      reports: folderReports,
+    })
+  }
+
+  // If there's no ミニカード folder but there are mini cards, create a virtual folder for them
+  if (!miniCardFolder) {
+    const allMiniCards = reports.filter(r => r.is_mini)
+    if (allMiniCards.length > 0) {
+      for (const r of allMiniCards) usedReportIds.add(r.id)
       result.push({
-        ...folder,
-        reports: folderReports,
+        name: 'ミニカード',
+        reports: allMiniCards,
+        isVirtual: true,
       })
     }
   }

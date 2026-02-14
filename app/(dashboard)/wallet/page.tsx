@@ -745,18 +745,35 @@ function MiniCardCreator({ userId, onCreated }: { userId?: string; onCreated: ()
           .insert({
             user_id: userId,
             name: 'ミニカード',
-            description: '一括登録されたミニカード',
             sort_order: 999,
           })
           .select('id')
           .single()
 
         if (folderError) {
-          console.error('Folder creation failed:', folderError)
-          toast.error('フォルダの作成に失敗しました')
-          return
+          // Unique constraint violation (23505) — folder was created by a concurrent request
+          if (folderError.code === '23505') {
+            const { data: retryFolder } = await supabase
+              .from('report_folders')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('name', 'ミニカード')
+              .maybeSingle()
+            if (retryFolder) {
+              folderId = retryFolder.id
+            } else {
+              console.error('Folder creation failed:', folderError)
+              toast.error('フォルダの作成に失敗しました')
+              return
+            }
+          } else {
+            console.error('Folder creation failed:', folderError)
+            toast.error('フォルダの作成に失敗しました')
+            return
+          }
+        } else {
+          folderId = newFolder.id
         }
-        folderId = newFolder.id
       }
 
       // Bulk insert mini-cards (only new ones)

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { SessionCard, SessionCardGrid } from '@/components/session-card'
+import { FolderCard, groupReportsIntoFolders, isVirtualFolder, isPlayReport, calculateFolderStats } from '@/components/folder-card'
+import type { ReportFolder } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { toast } from 'sonner'
@@ -168,6 +170,13 @@ export default function UserProfilePage() {
   })
   const [statsTab, setStatsTab] = useState<'stats' | 'profile'>('stats')
   const [favoriteReports, setFavoriteReports] = useState<PlayReport[]>([])
+  const [folders, setFolders] = useState<ReportFolder[]>([])
+  const [openFolder, setOpenFolder] = useState<(ReportFolder | { name: string; reports: PlayReport[]; isVirtual: true }) | null>(null)
+
+  // Group reports into folders (mini cards go into ミニカード folder)
+  const groupedItems = useMemo(() => {
+    return groupReportsIntoFolders(reports, folders)
+  }, [reports, folders])
 
   useEffect(() => {
     async function fetchData() {
@@ -255,6 +264,15 @@ export default function UserProfilePage() {
         `)
         .eq('user_id', profileData.id)
         .order('play_date_start', { ascending: false })
+
+      // Fetch user's folders
+      const { data: foldersData } = await supabase
+        .from('report_folders')
+        .select('*')
+        .eq('user_id', profileData.id)
+        .order('sort_order', { ascending: true })
+
+      setFolders(foldersData || [])
 
       // Fetch friends - users this profile is mutually connected with
       // A friend = mutual follow (both follow each other)
@@ -725,20 +743,78 @@ export default function UserProfilePage() {
                 </Link>
               )}
             </div>
+          ) : openFolder ? (
+            // Inside folder — show folder contents
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 pb-2 border-b border-border/50">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOpenFolder(null)}
+                  className="gap-2"
+                >
+                  ← 戻る
+                </Button>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold">{openFolder.name}</h2>
+                  <span className="text-sm text-muted-foreground">
+                    ({'reports' in openFolder ? openFolder.reports.length : 0}件)
+                  </span>
+                </div>
+              </div>
+              <SessionCardGrid columns={4}>
+                {'reports' in openFolder && openFolder.reports.map((report) => (
+                  <SessionCard key={report.id} report={report} showEdit={isOwnProfile} />
+                ))}
+              </SessionCardGrid>
+            </div>
           ) : (
             <SessionCardGrid columns={4}>
-              {/* Favorite reports first */}
-              {reports
-                .filter(r => profile.favorite_report_ids?.includes(r.id))
+              {/* Favorite reports first (non-mini only) */}
+              {groupedItems
+                .filter((item): item is PlayReport => isPlayReport(item) && !!profile.favorite_report_ids?.includes(item.id))
                 .map((report) => (
                   <SessionCard key={report.id} report={report} showEdit={isOwnProfile} isFavorite />
                 ))}
-              {/* Remaining reports */}
-              {reports
-                .filter(r => !profile.favorite_report_ids?.includes(r.id))
-                .map((report) => (
-                  <SessionCard key={report.id} report={report} showEdit={isOwnProfile} />
-                ))}
+              {/* Grouped items (folders + remaining reports) */}
+              {groupedItems.map((item, index) => {
+                if (isVirtualFolder(item)) {
+                  return (
+                    <FolderCard
+                      key={`vf-${item.name}-${index}`}
+                      folder={{
+                        id: `virtual-${item.name}`,
+                        user_id: '',
+                        name: item.name,
+                        description: null,
+                        cover_report_id: null,
+                        sort_order: 0,
+                        created_at: '',
+                        updated_at: '',
+                        reports: item.reports,
+                        ...calculateFolderStats(item.reports),
+                      }}
+                      onClick={() => setOpenFolder(item)}
+                    />
+                  )
+                } else if (isPlayReport(item)) {
+                  // Skip favorites (already rendered above)
+                  if (profile.favorite_report_ids?.includes(item.id)) return null
+                  return (
+                    <SessionCard key={item.id} report={item} showEdit={isOwnProfile} />
+                  )
+                } else {
+                  // Real folder (ReportFolder)
+                  const folder = item as ReportFolder
+                  return (
+                    <FolderCard
+                      key={folder.id}
+                      folder={folder}
+                      onClick={() => setOpenFolder(folder)}
+                    />
+                  )
+                }
+              })}
             </SessionCardGrid>
           )}
         </TabsContent>
