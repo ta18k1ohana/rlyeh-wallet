@@ -3,7 +3,7 @@
 import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Heart, Clock, Layers } from 'lucide-react'
+import { Heart, Clock, Layers, Folder, FolderOpen } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import type { ReportFolder, PlayReport } from '@/lib/types'
@@ -70,20 +70,39 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
         onClick={onClick}
         className="block w-full text-left"
       >
+        {/* Folder Tab — the distinctive visual indicator */}
+        <div className="flex items-end">
+          <div className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg",
+            "bg-amber-500/15 dark:bg-amber-500/20 border border-b-0 border-amber-500/30",
+            "transition-colors duration-300",
+            "group-hover:bg-amber-500/25 dark:group-hover:bg-amber-500/30"
+          )}>
+            <Folder className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 tracking-wide">
+              {stats.report_count}件
+            </span>
+          </div>
+          {/* Spacer to fill the rest of the top */}
+          <div className="flex-1" />
+        </div>
+
         {/* Card Container */}
         <div className={cn(
-          "relative overflow-hidden rounded-xl",
-          "bg-card border border-border/40",
+          "relative overflow-hidden rounded-b-xl rounded-tr-xl",
+          "border border-amber-500/30",
+          "bg-gradient-to-br from-amber-500/[0.06] via-card to-card",
+          "dark:from-amber-500/[0.08] dark:via-card dark:to-card",
           "transition-all duration-300 ease-out",
-          "hover:shadow-xl hover:shadow-black/[0.08] dark:hover:shadow-black/30",
-          "hover:border-border/60 hover:-translate-y-0.5"
+          "hover:shadow-xl hover:shadow-amber-500/[0.06] dark:hover:shadow-amber-500/[0.08]",
+          "hover:border-amber-500/50 hover:-translate-y-0.5"
         )}>
           {/* Image wrapper with folder stack effect — only shown when image exists */}
           {stats.cover_image_url ? (
-            <div className="relative w-full aspect-[4/3] bg-muted/30">
+            <div className="relative w-full aspect-[4/3] bg-muted/20">
               {/* Stacked card effect behind */}
-              <div className="absolute -top-1 left-2 right-2 h-3 rounded-t-lg bg-muted/50 border border-b-0 border-border/30" />
-              <div className="absolute -top-2 left-4 right-4 h-2 rounded-t-lg bg-muted/30 border border-b-0 border-border/20" />
+              <div className="absolute -top-1 left-2 right-2 h-3 rounded-t-lg bg-amber-500/10 border border-b-0 border-amber-500/20" />
+              <div className="absolute -top-2 left-4 right-4 h-2 rounded-t-lg bg-amber-500/5 border border-b-0 border-amber-500/10" />
 
               {/* Main image */}
               <div className="relative w-full h-full">
@@ -97,23 +116,27 @@ export function FolderCard({ folder, onClick }: FolderCardProps) {
               </div>
 
               {/* Card count badge */}
-              <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full bg-background/90 backdrop-blur-sm border border-border/50">
-                <Layers className="w-3 h-3 text-muted-foreground" />
-                <span className="text-xs font-medium">{stats.report_count}</span>
+              <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/15 backdrop-blur-sm border border-amber-500/30">
+                <Layers className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">{stats.report_count}</span>
               </div>
             </div>
           ) : (
-            /* Card count badge only, no image area */
-            <div className="flex items-center gap-1 px-3 pt-3">
-              <Layers className="w-3 h-3 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">{stats.report_count}件</span>
+            /* Folder icon placeholder — no image */
+            <div className="flex flex-col items-center justify-center py-6 px-4">
+              <div className="relative">
+                <FolderOpen className="w-12 h-12 text-amber-500/40 dark:text-amber-400/30 transition-transform duration-300 group-hover:scale-110" />
+                <div className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/30">
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">{stats.report_count}</span>
+                </div>
+              </div>
             </div>
           )}
 
           {/* Content area */}
           <div className="p-4 space-y-2.5">
             {/* Title */}
-            <h3 className="font-medium text-sm leading-relaxed line-clamp-2 text-foreground/90 group-hover:text-foreground transition-colors">
+            <h3 className="font-semibold text-sm leading-relaxed line-clamp-2 text-foreground/90 group-hover:text-foreground transition-colors">
               {folder.name}
             </h3>
 

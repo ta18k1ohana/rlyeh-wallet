@@ -9,12 +9,23 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { SessionCard, SessionCardGrid } from '@/components/session-card'
-import { FolderCard, groupReportsIntoFolders, isVirtualFolder, isPlayReport, calculateFolderStats } from '@/components/folder-card'
+import { FolderCard, groupReportsIntoFolders, isVirtualFolder, isReportFolder, isPlayReport, calculateFolderStats } from '@/components/folder-card'
 import type { ReportFolder } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { BookOpen, Users, Trophy, Clock, Percent, UserCheck, UserPlus, Loader2 } from 'lucide-react'
+import { BookOpen, Users, Trophy, Clock, Percent, UserCheck, UserPlus, Loader2, Trash2, FolderOpen, ArrowLeft } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import type { Profile, PlayReport } from '@/lib/types'
 import { TierBadge } from '@/components/tier-badge'
 import StatCard from '@/components/stat-card'
@@ -446,6 +457,31 @@ export default function UserProfilePage() {
     fetchData()
   }, [username])
 
+  // Delete folder handler (own profile only)
+  async function handleDeleteFolder(folderId: string) {
+    const supabase = createClient()
+
+    // Unassign all reports from this folder
+    await supabase
+      .from('play_reports')
+      .update({ folder_id: null })
+      .eq('folder_id', folderId)
+
+    const { error } = await supabase
+      .from('report_folders')
+      .delete()
+      .eq('id', folderId)
+
+    if (error) {
+      toast.error('フォルダの削除に失敗しました')
+    } else {
+      toast.success('フォルダを削除しました（中の記録はウォレットに残ります）')
+      setFolders(folders.filter(f => f.id !== folderId))
+      setOpenFolder(null)
+      window.location.reload()
+    }
+  }
+
   async function sendFriendRequest() {
     if (!currentUserId || !profile) return
 
@@ -694,8 +730,8 @@ export default function UserProfilePage() {
             type="button"
             onClick={() => setStatsTab('stats')}
             className={`px-3 py-1.5 text-sm rounded-full transition-colors ${statsTab === 'stats'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
               }`}
           >
             統計
@@ -704,8 +740,8 @@ export default function UserProfilePage() {
             type="button"
             onClick={() => setStatsTab('profile')}
             className={`px-3 py-1.5 text-sm rounded-full transition-colors ${statsTab === 'profile'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
               }`}
           >
             プロフィール
@@ -753,14 +789,48 @@ export default function UserProfilePage() {
                   onClick={() => setOpenFolder(null)}
                   className="gap-2"
                 >
-                  ← 戻る
+                  <ArrowLeft className="w-4 h-4" />
+                  戻る
                 </Button>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-1">
+                  <FolderOpen className="w-5 h-5 text-primary" />
                   <h2 className="font-semibold">{openFolder.name}</h2>
                   <span className="text-sm text-muted-foreground">
                     ({'reports' in openFolder ? openFolder.reports.length : 0}件)
                   </span>
                 </div>
+                {/* Delete button — own profile, real folders only */}
+                {isOwnProfile && isReportFolder(openFolder) && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">フォルダを削除</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>フォルダを削除しますか？</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          「{openFolder.name}」フォルダを削除します。フォルダ内の記録は削除されず、ウォレットに残ります。
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDeleteFolder(openFolder.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          削除する
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
               <SessionCardGrid columns={4}>
                 {'reports' in openFolder && openFolder.reports.map((report) => (

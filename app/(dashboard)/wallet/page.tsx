@@ -29,13 +29,26 @@ import {
   KeyRound,
   X,
   FileText,
-  HelpCircle
+  HelpCircle,
+  Trash2
 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { SessionCard, SessionCardGrid } from '@/components/session-card'
 import {
   FolderCard,
   groupReportsIntoFolders,
   isVirtualFolder,
+  isReportFolder,
   isPlayReport,
   type VirtualFolder,
   calculateFolderStats
@@ -209,6 +222,32 @@ export default function WalletPage() {
 
     loadData()
   }, [])
+
+  // Delete folder handler
+  async function handleDeleteFolder(folderId: string) {
+    const supabase = createClient()
+
+    // First, unassign all reports from this folder
+    await supabase
+      .from('play_reports')
+      .update({ folder_id: null })
+      .eq('folder_id', folderId)
+
+    const { error } = await supabase
+      .from('report_folders')
+      .delete()
+      .eq('id', folderId)
+
+    if (error) {
+      toast.error('フォルダの削除に失敗しました')
+    } else {
+      toast.success('フォルダを削除しました（中の記録はウォレットに残ります）')
+      setFolders(folders.filter(f => f.id !== folderId))
+      setOpenFolder(null)
+      // Reload to reflect unassigned reports
+      window.location.reload()
+    }
+  }
 
   // Group reports into folders (virtual for same scenario names, real for user-created)
   const groupedItems = useMemo(() => {
@@ -425,13 +464,45 @@ export default function WalletPage() {
             <ArrowLeft className="w-4 h-4" />
             戻る
           </Button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <FolderOpen className="w-5 h-5 text-primary" />
             <h2 className="font-semibold">{openFolder.name}</h2>
             <span className="text-sm text-muted-foreground">
               ({('reports' in openFolder ? openFolder.reports.length : 0)}件)
             </span>
           </div>
+          {/* Delete button — only for real (DB-backed) folders, not virtual */}
+          {isReportFolder(openFolder) && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">フォルダを削除</span>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>フォルダを削除しますか？</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    「{openFolder.name}」フォルダを削除します。フォルダ内の記録は削除されず、ウォレットに残ります。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => handleDeleteFolder(openFolder.id)}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    削除する
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       )}
 
