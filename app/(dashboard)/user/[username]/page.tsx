@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import type { Profile, PlayReport } from '@/lib/types'
+import type { Profile, PlayReport, ScenarioPreference } from '@/lib/types'
 import { TierBadge } from '@/components/tier-badge'
 import StatCard from '@/components/stat-card'
 import { ActivityTimeline } from '@/components/activity-timeline'
@@ -183,6 +183,7 @@ export default function UserProfilePage() {
   const [favoriteReports, setFavoriteReports] = useState<PlayReport[]>([])
   const [folders, setFolders] = useState<ReportFolder[]>([])
   const [openFolder, setOpenFolder] = useState<(ReportFolder | { name: string; reports: PlayReport[]; isVirtual: true }) | null>(null)
+  const [wantToPlayScenarios, setWantToPlayScenarios] = useState<ScenarioPreference[]>([])
 
   // Group reports into folders (mini cards go into ミニカード folder)
   const groupedItems = useMemo(() => {
@@ -449,6 +450,18 @@ export default function UserProfilePage() {
         if (favReports) {
           setFavoriteReports(favReports as PlayReport[])
         }
+      }
+
+      // Fetch want_to_play scenario preferences
+      const { data: scenarioPrefs } = await supabase
+        .from('scenario_preferences')
+        .select('*')
+        .eq('user_id', profileData.id)
+        .eq('preference_type', 'want_to_play')
+        .order('created_at', { ascending: true })
+
+      if (scenarioPrefs) {
+        setWantToPlayScenarios(scenarioPrefs)
       }
 
       setLoading(false)
@@ -758,7 +771,7 @@ export default function UserProfilePage() {
             <StatCard icon={<Percent className="w-4 h-4" />} label="生還率" value={`${stats.survivalRate}%`} />
           </div>
         ) : (
-          <TrpgPreferenceDisplay profile={profile} favoriteReports={favoriteReports} />
+          <TrpgPreferenceDisplay profile={profile} favoriteReports={favoriteReports} wantToPlayScenarios={wantToPlayScenarios} />
         )}
       </div>
 

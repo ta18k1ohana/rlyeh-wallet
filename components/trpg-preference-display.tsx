@@ -5,20 +5,22 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { getRolePreferenceLabel } from '@/lib/trpg-preferences'
-import type { Profile, PlayReport } from '@/lib/types'
+import type { Profile, PlayReport, ScenarioPreference } from '@/lib/types'
 
 interface TrpgPreferenceDisplayProps {
   profile: Profile
   favoriteReports: PlayReport[]
+  wantToPlayScenarios?: ScenarioPreference[]
 }
 
-export function TrpgPreferenceDisplay({ profile, favoriteReports }: TrpgPreferenceDisplayProps) {
+export function TrpgPreferenceDisplay({ profile, favoriteReports, wantToPlayScenarios = [] }: TrpgPreferenceDisplayProps) {
   const hasAnyPreferences =
     profile.role_preference ||
     (profile.favorite_report_ids?.length ?? 0) > 0 ||
     (profile.scenario_tags?.length ?? 0) > 0 ||
     (profile.play_style_tags?.length ?? 0) > 0 ||
-    profile.play_style_other
+    profile.play_style_other ||
+    wantToPlayScenarios.length > 0
 
   if (!hasAnyPreferences) {
     return (
@@ -52,8 +54,8 @@ export function TrpgPreferenceDisplay({ profile, favoriteReports }: TrpgPreferen
             好きなシナリオ
           </p>
           <div className={`grid gap-3 ${favoriteReports.length === 1 ? 'grid-cols-1 max-w-xs' :
-              favoriteReports.length === 2 ? 'grid-cols-2 max-w-lg' :
-                'grid-cols-2 sm:grid-cols-3'
+            favoriteReports.length === 2 ? 'grid-cols-2 max-w-lg' :
+              'grid-cols-2 sm:grid-cols-3'
             }`}>
             {favoriteReports.map((report) => (
               <Link
@@ -131,6 +133,36 @@ export function TrpgPreferenceDisplay({ profile, favoriteReports }: TrpgPreferen
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Want to Play Scenarios */}
+      {wantToPlayScenarios.length > 0 && (
+        <div className="md:col-span-2">
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="pt-4 pb-4 px-4">
+              <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+                </svg>
+                回りたいシナリオ
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {wantToPlayScenarios.map((pref) => (
+                  <div
+                    key={pref.id}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/[0.08] border border-emerald-500/20 hover:bg-emerald-500/[0.12] transition-colors"
+                  >
+                    <span className="text-sm font-medium text-foreground/90">{pref.scenario_name}</span>
+                    {pref.scenario_author && (
+                      <span className="text-[11px] text-muted-foreground">/ {pref.scenario_author}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )
