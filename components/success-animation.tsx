@@ -11,20 +11,31 @@ interface SuccessAnimationProps {
   duration?: number
 }
 
-export function SuccessAnimation({ 
-  show, 
-  onComplete, 
+export function SuccessAnimation({
+  show,
+  onComplete,
   message = 'セッション記録を作成しました',
-  duration = 2000 
+  duration = 2000
 }: SuccessAnimationProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
+
+  // Generate confetti positions once on mount to avoid hydration mismatch
+  const [confettiPositions] = useState(() =>
+    Array.from({ length: 20 }).map((_, i) => ({
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      color: ['#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#3B82F6'][i % 5],
+      delay: Math.random() * 0.5,
+      duration: 1 + Math.random()
+    }))
+  )
 
   useEffect(() => {
     if (show) {
       setIsVisible(true)
       setIsAnimating(true)
-      
+
       const timer = setTimeout(() => {
         setIsAnimating(false)
         setTimeout(() => {
@@ -35,7 +46,8 @@ export function SuccessAnimation({
 
       return () => clearTimeout(timer)
     }
-  }, [show, duration, onComplete])
+  }, [show, duration])
+  // onComplete is intentionally excluded to prevent re-triggering
 
   if (!isVisible) return null
 
@@ -78,16 +90,16 @@ export function SuccessAnimation({
 
         {/* Confetti-like particles */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {Array.from({ length: 20 }).map((_, i) => (
+          {confettiPositions.map((pos, i) => (
             <div
               key={i}
               className="absolute w-2 h-2 rounded-full animate-confetti"
               style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                backgroundColor: ['#8B5CF6', '#EC4899', '#10B981', '#F59E0B', '#3B82F6'][i % 5],
-                animationDelay: `${Math.random() * 0.5}s`,
-                animationDuration: `${1 + Math.random()}s`,
+                left: `${pos.left}%`,
+                top: `${pos.top}%`,
+                backgroundColor: pos.color,
+                animationDelay: `${pos.delay}s`,
+                animationDuration: `${pos.duration}s`,
               }}
             />
           ))}
