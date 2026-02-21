@@ -8,11 +8,13 @@ import { TrendingScenarios } from '@/components/trending-scenarios'
 import {
   WelcomeHeader,
   MilestoneBanner,
-  WeeklyActivity,
+  RoleStats,
   ActiveFriends,
+  SuggestedUsers,
   InvestigatorRank,
   MythosTip,
 } from '@/components/dashboard-widgets'
+import type { SuggestedUser } from '@/components/dashboard-widgets'
 import { getProfileLimits, canUseFeature } from '@/lib/tier-limits'
 import type { PlayReport, Profile, ScenarioPreference } from '@/lib/types'
 
@@ -66,21 +68,6 @@ export default async function DashboardPage() {
   ).length || 0
 
   // =============================================
-  // Daily activity heatmap (last 28 days)
-  // =============================================
-  const dailyCounts: number[] = []
-  for (let i = 27; i >= 0; i--) {
-    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
-    const dayEnd = new Date(dayStart)
-    dayEnd.setDate(dayEnd.getDate() + 1)
-    const count = userReports?.filter(r => {
-      const d = new Date(r.created_at)
-      return d >= dayStart && d < dayEnd
-    }).length || 0
-    dailyCounts.push(count)
-  }
-
-  // =============================================
   // Weekly streak (consecutive weeks with at least 1 report)
   // =============================================
   let streak = 0
@@ -109,12 +96,15 @@ export default async function DashboardPage() {
 
   let plSessions = 0
   let surviveCount = 0
+  let kpSessions = 0
   userParticipants?.forEach(p => {
     if (p.role === 'PL') {
       if (p.result === 'survive' || p.result === 'dead' || p.result === 'insane') {
         plSessions++
         if (p.result === 'survive') surviveCount++
       }
+    } else if (p.role === 'KP') {
+      kpSessions++
     }
   })
   const survivalRate = plSessions > 0 ? Math.round((surviveCount / plSessions) * 100) : 100
@@ -175,6 +165,118 @@ export default async function DashboardPage() {
       }))
       .sort((a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime())
       .slice(0, 5)
+  }
+
+  // =============================================
+  // Suggested Users
+  // =============================================
+  const suggestedUsers: SuggestedUser[] = []
+  const suggestedUserIds = new Set<string>([user.id, ...followingIds]) // 自分とフォロー済みは除外
+
+  // 1. 友達の友達（friend of friend）
+  let fofProfiles: { id: string; username: string; display_name: string | null; avatar_url: string | null }[] = []
+  if (friendIds.length > 0) {
+    const { data: fofFollowing } = await supabase
+      .from('follows')
+      .select('following_id')
+      .in('follower_id', friendIds)
+      .not('following_id', 'in', `(${[user.id, ...followingIds].join(',')})`)
+
+    const fofIds = [...new Set((fofFollowing || []).map(f => f.following_id))]
+
+    if (fofIds.length > 0) {
+      const { data: fofData } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', fofIds)
+        .limit(3)
+
+      fofProfiles = fofData || []
+      for (const p of fofProfiles) {
+        if (!suggestedUserIds.has(p.id)) {
+          suggestedUsers.push({ profile: p as any, reason: 'friend_of_friend' })
+          suggestedUserIds.add(p.id)
+        }
+      }
+    }
+  }
+
+  // 2. 同じシナリオを遊んだユーザー
+  if (playedScenarios.size > 0) {
+    const scenarioList = [...playedScenarios].slice(0, 5)
+    const { data: sameScenarioReports } = await supabase
+      .from('play_reports')
+      .select('user_id, scenario_name')
+      .in('scenario_name', scenarioList)
+      .eq('privacy_setting', 'public')
+      .neq('user_id', user.id)
+      .limit(30)
+
+    // ユーザーごとに最初のシナリオ名を記録
+    const scenarioByUser = new Map<string, string>()
+    for (const r of (sameScenarioReports || [])) {
+      if (!scenarioByUser.has(r.user_id)) scenarioByUser.set(r.user_id, r.scenario_name)
+    }
+
+    const candidateIds = [...scenarioByUser.keys()].filter(id => !suggestedUserIds.has(id)).slice(0, 5)
+    if (candidateIds.length > 0) {
+      const { data: candidateProfiles } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', candidateIds)
+        .limit(3)
+
+      for (const p of (candidateProfiles || [])) {
+        if (!suggestedUserIds.has(p.id) && suggestedUsers.length < 5) {
+          suggestedUsers.push({
+            profile: p as any,
+            reason: 'same_scenario',
+            reasonDetail: scenarioByUser.get(p.id),
+          })
+          suggestedUserIds.add(p.id)
+        }
+      }
+    }
+  }
+
+  // 3. アクティブなKP（まだ足りない場合）
+  if (suggestedUsers.length < 5) {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const { data: activeKpReports } = await supabase
+      .from('play_reports')
+      .select('user_id')
+      .eq('privacy_setting', 'public')
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .limit(50)
+
+    // KP参加者から絞り込み
+    const { data: kpParticipants } = await supabase
+      .from('play_report_participants')
+      .select('user_id')
+      .eq('role', 'KP')
+      .in('user_id', [...new Set((activeKpReports || []).map(r => r.user_id))])
+      .limit(20)
+
+    const activeKpIds = [...new Set((kpParticipants || []).map(p => p.user_id))]
+      .filter(id => !suggestedUserIds.has(id))
+      .slice(0, 3)
+
+    if (activeKpIds.length > 0) {
+      const { data: kpProfiles } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', activeKpIds)
+        .limit(5 - suggestedUsers.length)
+
+      for (const p of (kpProfiles || [])) {
+        if (!suggestedUserIds.has(p.id) && suggestedUsers.length < 5) {
+          suggestedUsers.push({ profile: p as any, reason: 'active_kp' })
+          suggestedUserIds.add(p.id)
+        }
+      }
+    }
   }
 
   // Get friends of friends for recommendations
@@ -496,11 +598,13 @@ export default async function DashboardPage() {
         uniqueAuthors={uniqueAuthors}
         uniqueScenarios={uniqueScenarios}
         survivalRate={survivalRate}
+        plCount={plSessions}
+        kpCount={kpSessions}
         trendingScenarios={trendingScenarios}
         isMeasuring={isMeasuring}
         measurementDay={currentDay}
-        dailyCounts={dailyCounts}
         activeFriends={activeFriends}
+        suggestedUsers={suggestedUsers}
       />
     </div>
   )
@@ -514,11 +618,13 @@ function RightSidebarContent({
   uniqueAuthors,
   uniqueScenarios,
   survivalRate,
+  plCount,
+  kpCount,
   trendingScenarios,
   isMeasuring,
   measurementDay,
-  dailyCounts,
   activeFriends,
+  suggestedUsers,
 }: {
   totalReports: number
   thisMonthReports: number
@@ -526,11 +632,13 @@ function RightSidebarContent({
   uniqueAuthors: number
   uniqueScenarios: number
   survivalRate: number
+  plCount: number
+  kpCount: number
   trendingScenarios: { name: string; author: string | null; count: number; trend: 'up' | 'new' | 'stable' }[]
   isMeasuring: boolean
   measurementDay: number
-  dailyCounts: number[]
   activeFriends: { profile: any; lastActive: string; recentScenario?: string }[]
+  suggestedUsers: SuggestedUser[]
 }) {
   return (
     <div className="hidden lg:block fixed right-0 top-0 w-[350px] h-screen overflow-y-auto px-4 py-4 border-l border-border/50 bg-background">
@@ -553,11 +661,14 @@ function RightSidebarContent({
         uniqueScenarios={uniqueScenarios}
       />
 
-      {/* Weekly Activity Heatmap */}
-      <WeeklyActivity dailyCounts={dailyCounts} />
+      {/* PL/KP Role Stats */}
+      <RoleStats plCount={plCount} kpCount={kpCount} totalReports={totalReports} />
 
       {/* Active Friends */}
       <ActiveFriends friends={activeFriends} />
+
+      {/* Suggested Users */}
+      <SuggestedUsers users={suggestedUsers} />
 
       {/* Trending */}
       <TrendingScenarios scenarios={trendingScenarios} isMeasuring={isMeasuring} measurementDay={measurementDay} />

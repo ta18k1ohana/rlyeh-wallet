@@ -26,7 +26,6 @@ import {
   User,
   Copy,
   Check,
-  Twitter
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { generateShareCode } from '@/lib/utils'
@@ -80,7 +79,7 @@ export default function NewReportPage() {
   const [endType, setEndType] = useState('')
   const [endDescription, setEndDescription] = useState('')
   const [impression, setImpression] = useState('')
-  const [twitterCopied, setTwitterCopied] = useState(false)
+  const [xCopied, setXCopied] = useState(false)
   const [privacySetting, setPrivacySetting] = useState<'public' | 'followers' | 'private'>('followers')
   const [links, setLinks] = useState<ReportLink[]>([])
   const [participants, setParticipants] = useState<Participant[]>([
@@ -107,32 +106,62 @@ export default function NewReportPage() {
     setParticipants(updated)
   }
 
-  function generateTwitterText(): string {
-    const plParticipants = participants.filter(p => p.role === 'PL' && p.character_name)
-    const characterInfo = plParticipants.map(p => {
-      const hoText = p.handout ? `(${p.handout})` : ''
-      const resultIcon = p.result === 'survive' ? '' :
-        p.result === 'lost' ? '†' : ''
-      return `${p.character_name}${hoText}${resultIcon}`
-    }).join('/')
+  function generateXText(): string {
+    const kpParticipants = participants.filter(p => p.role === 'KP')
+    const plParticipants = participants.filter(p => p.role === 'PL')
 
-    let text = `【通過】${scenarioName}`
-    if (scenarioAuthor) text += ` / ${scenarioAuthor}`
-    text += '\n'
-    if (characterInfo) text += `PC: ${characterInfo}\n`
-    if (endType) text += `エンド: ${endType}\n`
-    if (endDescription) text += `${endDescription}\n`
-    text += '\n#TRPG #CoC'
+    let text = `クトゥルフ神話TRPG【${scenarioName}】\n`
+
+    // KP
+    if (kpParticipants.length > 0) {
+      text += '\n'
+      kpParticipants.forEach(p => {
+        const name = p.character_name || p.username || 'KP'
+        text += `KP：${name}\n`
+      })
+    }
+
+    // PC/PL
+    if (plParticipants.length > 0) {
+      text += '\nPC/PL\n'
+      plParticipants.forEach(p => {
+        const hoPrefix = p.handout ? `${p.handout}：` : ''
+        const charPart = p.character_name || ''
+        const playerPart = p.username || ''
+        const resultIcon = p.result === 'lost' ? '†' : ''
+        if (charPart && playerPart) {
+          text += `${hoPrefix}${charPart}${resultIcon}/${playerPart}\n`
+        } else if (charPart) {
+          text += `${hoPrefix}${charPart}${resultIcon}\n`
+        } else if (playerPart) {
+          text += `${hoPrefix}${playerPart}\n`
+        }
+      })
+    }
+
+    // エンド結果
+    if (endType || endDescription) {
+      text += '\n'
+      if (endType) text += `― ${endType} ―\n`
+      if (endDescription) text += `${endDescription}\n`
+    }
+
+    // 感想
+    if (impression) {
+      text += `\n${impression}\n`
+    }
+
+    text += '\n#TRPG #クトゥルフ神話TRPG #ルルイエウォレット'
 
     return text
   }
 
-  function copyTwitterText() {
-    const text = generateTwitterText()
+  function copyXText() {
+    const text = generateXText()
     navigator.clipboard.writeText(text)
-    setTwitterCopied(true)
+    setXCopied(true)
     toast.success('クリップボードにコピーしました')
-    setTimeout(() => setTwitterCopied(false), 2000)
+    setTimeout(() => setXCopied(false), 2000)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -171,7 +200,10 @@ export default function NewReportPage() {
         .select()
         .single()
 
-      if (reportError) throw reportError
+      if (reportError) {
+        console.error('Report creation error:', reportError)
+        throw reportError
+      }
 
       // Add participants
       const validParticipants = participants.filter(p => p.username.trim())
@@ -190,7 +222,10 @@ export default function NewReportPage() {
             }))
           )
 
-        if (participantsError) throw participantsError
+        if (participantsError) {
+          console.error('Participants creation error:', participantsError)
+          throw participantsError
+        }
       }
 
       // Add additional images
@@ -206,7 +241,10 @@ export default function NewReportPage() {
             }))
           )
 
-        if (imagesError) throw imagesError
+        if (imagesError) {
+          console.error('Images creation error:', imagesError)
+          throw imagesError
+        }
       }
 
       // Add links
@@ -223,15 +261,25 @@ export default function NewReportPage() {
             }))
           )
 
-        if (linksError) throw linksError
+        if (linksError) {
+          console.error('Links creation error:', linksError)
+          throw linksError
+        }
       }
 
+      // Success
       setCreatedReportId(report.id)
       setShowSuccess(true)
-    } catch (error) {
+      // Don't set loading to false here - let the animation complete first
+    } catch (error: any) {
       console.error('Error creating report:', error)
-      toast.error('作成に失敗しました')
-    } finally {
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint
+      })
+      toast.error(error?.message || '作成に失敗しました')
       setLoading(false)
     }
   }
@@ -241,6 +289,7 @@ export default function NewReportPage() {
       <SuccessAnimation
         show={showSuccess}
         onComplete={() => {
+          setLoading(false)
           if (createdReportId) {
             router.push(`/reports/${createdReportId}`)
           }
@@ -565,14 +614,14 @@ export default function NewReportPage() {
             </CardContent>
           </Card>
 
-          {/* Twitter Text */}
+          {/* X Post Text */}
           <Card className="bg-card/50 border-border/50">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <Twitter className="w-5 h-5" />
-                    Twitter投稿テキスト
+                    <span className="w-5 h-5 flex items-center justify-center font-black text-base leading-none">𝕏</span>
+                    X投稿テキスト
                   </CardTitle>
                   <CardDescription>通過報告用のテキストを生成</CardDescription>
                 </div>
@@ -580,11 +629,11 @@ export default function NewReportPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={copyTwitterText}
+                  onClick={copyXText}
                   disabled={!scenarioName}
                   className="gap-2 bg-transparent"
                 >
-                  {twitterCopied ? (
+                  {xCopied ? (
                     <>
                       <Check className="w-4 h-4" />
                       コピー完了
@@ -599,11 +648,18 @@ export default function NewReportPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="p-3 rounded-lg bg-background/50 border border-border/50">
-                <pre className="whitespace-pre-wrap text-sm font-mono">
-                  {scenarioName ? generateTwitterText() : '（シナリオ名を入力するとプレビューが表示されます）'}
-                </pre>
-              </div>
+              {scenarioName ? (
+                <div className="rounded-xl border border-border/50 bg-background p-4">
+                  {/* X post style preview */}
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                    {generateXText()}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border/50 bg-muted/30 p-4 text-center">
+                  <p className="text-sm text-muted-foreground">シナリオ名を入力するとプレビューが表示されます</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

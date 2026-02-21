@@ -12,12 +12,14 @@ import {
   TrendingUp,
   Users,
   Skull,
-  Zap,
   Moon,
   Eye,
   Crown,
   Compass,
   Scroll,
+  Shield,
+  Swords,
+  UserPlus,
 } from 'lucide-react'
 import type { Profile } from '@/lib/types'
 
@@ -137,70 +139,78 @@ function SanityPill({ sanity }: { sanity: number }) {
 }
 
 // =============================================
-// 2. Weekly Activity Heatmap (GitHub-style but CoC-themed)
+// 2. Role Stats — PL/KP counts
 // =============================================
-interface WeeklyActivityProps {
-  // Array of 28 values (4 weeks × 7 days) — most recent day is last
-  dailyCounts: number[]
+interface RoleStatsProps {
+  plCount: number
+  kpCount: number
+  totalReports: number
 }
 
-export function WeeklyActivity({ dailyCounts }: WeeklyActivityProps) {
-  // Use last 28 days (4 weeks)
-  const weeks = useMemo(() => {
-    const data = dailyCounts.slice(-28)
-    // Pad start if less than 28
-    while (data.length < 28) data.unshift(0)
-    // Split into 4 rows of 7
-    const rows: number[][] = []
-    for (let i = 0; i < 4; i++) {
-      rows.push(data.slice(i * 7, (i + 1) * 7))
-    }
-    return rows
-  }, [dailyCounts])
-
-  const dayLabels = ['月', '火', '水', '木', '金', '土', '日']
+export function RoleStats({ plCount, kpCount, totalReports }: RoleStatsProps) {
+  const plRatio = totalReports > 0 ? Math.round((plCount / totalReports) * 100) : 0
+  const kpRatio = totalReports > 0 ? Math.round((kpCount / totalReports) * 100) : 0
 
   return (
     <div className="rounded-xl bg-muted/30 p-4 mb-4">
-      <h3 className="font-bold mb-2 flex items-center gap-2 text-sm">
-        <Zap className="w-4 h-4 text-amber-500" />
-        探索活動
+      <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
+        <Swords className="w-4 h-4 text-violet-500" />
+        探索スタイル
       </h3>
-      <div className="space-y-1">
-        {/* Day labels */}
-        <div className="flex gap-1 mb-1">
-          <div className="w-6" /> {/* spacer for week labels */}
-          {dayLabels.map((d) => (
-            <div key={d} className="w-5 h-4 flex items-center justify-center">
-              <span className="text-[9px] text-muted-foreground">{d}</span>
-            </div>
-          ))}
-        </div>
-        {weeks.map((week, wi) => (
-          <div key={wi} className="flex gap-1 items-center">
-            <div className="w-6 flex items-center justify-center">
-              <span className="text-[9px] text-muted-foreground">
-                {wi === 3 ? '今' : `${3 - wi}w`}
-              </span>
-            </div>
-            {week.map((count, di) => (
-              <div
-                key={di}
-                className={`w-5 h-5 rounded-sm transition-colors ${
-                  count === 0
-                    ? 'bg-muted/50'
-                    : count === 1
-                      ? 'bg-emerald-500/30'
-                      : count === 2
-                        ? 'bg-emerald-500/50'
-                        : 'bg-emerald-500/80'
-                }`}
-                title={`${count}件の記録`}
-              />
-            ))}
+      <div className="grid grid-cols-2 gap-3">
+        {/* PL */}
+        <div className="rounded-lg bg-background/60 p-3 text-center">
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <Shield className="w-3.5 h-3.5 text-blue-500" />
+            <span className="text-xs font-medium text-muted-foreground">PL（探索者）</span>
           </div>
-        ))}
+          <p className="text-2xl font-bold text-blue-500">{plCount}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">回</p>
+          {totalReports > 0 && (
+            <div className="mt-2">
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500/70 rounded-full"
+                  style={{ width: `${plRatio}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{plRatio}%</p>
+            </div>
+          )}
+        </div>
+        {/* KP */}
+        <div className="rounded-lg bg-background/60 p-3 text-center">
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <Crown className="w-3.5 h-3.5 text-amber-500" />
+            <span className="text-xs font-medium text-muted-foreground">KP（進行役）</span>
+          </div>
+          <p className="text-2xl font-bold text-amber-500">{kpCount}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">回</p>
+          {totalReports > 0 && (
+            <div className="mt-2">
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-500/70 rounded-full"
+                  style={{ width: `${kpRatio}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{kpRatio}%</p>
+            </div>
+          )}
+        </div>
       </div>
+      {/* Style label */}
+      {totalReports > 0 && (
+        <p className="text-[11px] text-muted-foreground text-center mt-2.5">
+          {plCount === 0 && kpCount === 0
+            ? 'まだ記録がありません'
+            : plCount > kpCount * 2
+              ? '探索者タイプ — PLが得意'
+              : kpCount > plCount * 2
+                ? '進行役タイプ — KPが得意'
+                : 'バランスタイプ — PL/KP両刀'}
+        </p>
+      )}
     </div>
   )
 }
@@ -284,7 +294,82 @@ function formatShortTimeAgo(dateString: string): string {
 }
 
 // =============================================
-// 4. Investigator Rank Card — gamification
+// 4. Suggested Users
+// =============================================
+export type SuggestedUserReason =
+  | 'friend_of_friend'   // フォロワーがフォローしている
+  | 'same_scenario'      // 同じシナリオを遊んだ
+  | 'active_kp'          // アクティブなKP
+
+export interface SuggestedUser {
+  profile: Profile
+  reason: SuggestedUserReason
+  reasonDetail?: string  // シナリオ名など
+}
+
+interface SuggestedUsersProps {
+  users: SuggestedUser[]
+}
+
+export function SuggestedUsers({ users }: SuggestedUsersProps) {
+  if (users.length === 0) return null
+
+  function reasonLabel(user: SuggestedUser) {
+    switch (user.reason) {
+      case 'friend_of_friend':
+        return 'フォロワーがフォロー中'
+      case 'same_scenario':
+        return user.reasonDetail
+          ? `「${user.reasonDetail}」を遊んだ`
+          : '同じシナリオを遊んだ'
+      case 'active_kp':
+        return 'アクティブなKP'
+    }
+  }
+
+  return (
+    <div className="rounded-xl bg-muted/30 p-4 mb-4">
+      <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
+        <UserPlus className="w-4 h-4 text-emerald-500" />
+        おすすめユーザー
+      </h3>
+      <div className="space-y-3">
+        {users.slice(0, 5).map((u) => (
+          <div key={u.profile.id} className="flex items-center gap-2.5">
+            <Link href={`/user/${u.profile.username}`} className="shrink-0">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={u.profile.avatar_url || undefined} />
+                <AvatarFallback className="text-xs">
+                  {(u.profile.display_name || u.profile.username)?.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            </Link>
+            <div className="flex-1 min-w-0">
+              <Link
+                href={`/user/${u.profile.username}`}
+                className="text-sm font-medium hover:underline truncate block"
+              >
+                {u.profile.display_name || u.profile.username}
+              </Link>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {reasonLabel(u)}
+              </p>
+            </div>
+            <Link
+              href={`/user/${u.profile.username}`}
+              className="shrink-0 text-[11px] text-primary hover:underline font-medium"
+            >
+              見る
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// =============================================
+// 5. Investigator Rank Card — gamification
 // =============================================
 interface InvestigatorRankProps {
   totalReports: number
